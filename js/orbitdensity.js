@@ -17,7 +17,7 @@ const rScale = d3.scalePow().exponent(0.45)
     .domain([0, 40000])
     .range([earthRadiusPx, (width / 2) - 50]);
 
-d3.tsv("satcat.tsv").then(rawData => {
+d3.tsv("data/satcat.tsv").then(rawData => {
     const altitudes = rawData
         .map(d => +d.Altitude || +d.Perigee || 0)
         .filter(alt => alt > 0);
