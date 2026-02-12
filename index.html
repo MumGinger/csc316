@@ -12,7 +12,7 @@
     <header>
     <h1>[super cool title here]</h1>
     <p>
-    <i>Lucas Helme, [your name here], ...</i>
+    <i>Lucas Helme, Daniel Benavides-Alvarez, [your name here], ...</i>
     </p>
     </header>
     <p>[filler]</p>
@@ -20,6 +20,15 @@
     <script type="module" src="js/main.js"></script>
     <p>[filler]</p>
     <p>VIS HERE</p>
+
+        <h2>Satellites by manufacturer / country</h2>
+        <label for="ranking-type">Plot by: </label>
+            <select id="ranking-type">
+                <option value="manufacturer" selected>Manufacturer</option>
+                <option value="owner">Country</option>
+            </select>
+        <div id="manufacturer" class="center"></div>
+    <script type="module" src="js/manufacturer.js"></script>
 
     <h2>orbital density</h2>
     <div id="orbitdensity" class="center"></div>
