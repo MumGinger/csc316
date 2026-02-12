@@ -63,8 +63,8 @@ const CONTINENT_VIEWS = {
 
 // Easy-to-tweak camera defaults.
 const CAMERA = {
-  yawDeg: 45,
-  pitchDeg: 60,
+  yawDeg: 15,
+  pitchDeg: 75,
 };
 
 const BAR_WIDTH = 10;
@@ -77,7 +77,9 @@ function normalizeSiteCode(value) {
 }
 
 function buildSiteCounts(rows, continent) {
-  const filtered = rows.filter((row) => String(row.CONTINENT ?? "").trim() === continent);
+  const filtered = rows.filter(
+    (row) => String(row.CONTINENT ?? "").trim() === continent,
+  );
 
   return d3
     .rollups(
@@ -95,9 +97,10 @@ function polygonPath(points) {
 }
 
 function waitForTransforms() {
-  return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  return new Promise((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(resolve)),
+  );
 }
-
 
 function dotLocalPointToSvgViaCTM(dotNode, svgNode, localX, localY) {
   const dotCTM = dotNode.getScreenCTM();
@@ -165,12 +168,19 @@ export async function renderLaunchMap({
   const projection = d3.geoMercator();
   const geoPath = d3.geoPath(projection);
 
-  const [rows, topo] = await Promise.all([d3.csv(csvPath), d3.json(worldTopoPath)]);
+  const [rows, topo] = await Promise.all([
+    d3.csv(csvPath),
+    d3.json(worldTopoPath),
+  ]);
   const land = feature(topo, topo.objects.land);
 
   const validSet = new Set(VALID_CONTINENTS);
   const continentOptions = Array.from(
-    new Set(rows.map((d) => String(d.CONTINENT ?? "").trim()).filter((c) => validSet.has(c))),
+    new Set(
+      rows
+        .map((d) => String(d.CONTINENT ?? "").trim())
+        .filter((c) => validSet.has(c)),
+    ),
   ).sort((a, b) => VALID_CONTINENTS.indexOf(a) - VALID_CONTINENTS.indexOf(b));
 
   dropdown
@@ -230,7 +240,11 @@ export async function renderLaunchMap({
     const projectedSites = siteCounts
       .map((d) => {
         const lonLat = LAUNCH_SITE_COORDS[d.site];
-        if (!lonLat || !Number.isFinite(lonLat[0]) || !Number.isFinite(lonLat[1])) {
+        if (
+          !lonLat ||
+          !Number.isFinite(lonLat[0]) ||
+          !Number.isFinite(lonLat[1])
+        ) {
           missingCodes.push(d.site);
           return null;
         }
@@ -241,7 +255,10 @@ export async function renderLaunchMap({
         return { site: d.site, count: d.count, x: p[0], y: p[1] };
       })
       .filter(Boolean)
-      .filter((d) => d.x >= -80 && d.x <= width + 80 && d.y >= -80 && d.y <= height + 80);
+      .filter(
+        (d) =>
+          d.x >= -80 && d.x <= width + 80 && d.y >= -80 && d.y <= height + 80,
+      );
 
     if (missingCodes.length) {
       const uniqueMissing = Array.from(new Set(missingCodes));
@@ -291,7 +308,10 @@ export async function renderLaunchMap({
       .filter(Boolean);
 
     const maxCount = d3.max(barsData, (d) => d.count) || 1;
-    const barHeightScale = d3.scaleLinear().domain([0, maxCount]).range([0, 140]);
+    const barHeightScale = d3
+      .scaleLinear()
+      .domain([0, maxCount])
+      .range([0, 140]);
 
     const bars = gBarsOverlay
       .selectAll("g.bar3d")
@@ -403,7 +423,9 @@ export async function renderLaunchMap({
         .attr("y", 72)
         .attr("font-size", 12)
         .attr("fill", "#9f1239")
-        .text("Some site coordinates are missing. Open console for site codes to add.");
+        .text(
+          "Some site coordinates are missing. Open console for site codes to add.",
+        );
     }
   }
 
