@@ -48,7 +48,6 @@ const VALID_CONTINENTS = [
   "North America",
   "South America",
   "Oceania",
-  "Antarctica",
 ];
 
 const CONTINENT_VIEWS = {
@@ -58,7 +57,6 @@ const CONTINENT_VIEWS = {
   "North America": { center: [-100, 40], scale: 420 },
   "South America": { center: [-60, -18], scale: 470 },
   Oceania: { center: [145, -23], scale: 520 },
-  Antarctica: { center: [0, -82], scale: 900 },
 };
 
 // Easy-to-tweak camera defaults.
@@ -138,8 +136,8 @@ export async function renderLaunchMap({
   csvPath = "data/satcat_with_continent.csv",
   worldTopoPath = "data/land-110m.json",
   defaultContinent = "Asia",
-  width = 1100,
-  height = 680,
+  width = 1280,
+  height = 720,
 } = {}) {
   const container = d3.select(containerSelector);
   const dropdown = d3.select(dropdownSelector);
@@ -151,7 +149,17 @@ export async function renderLaunchMap({
     .attr("width", width)
     .attr("height", height)
     .attr("viewBox", `0 0 ${width} ${height}`)
-    .style("background", "#f8fbff");
+    .style("background", "#dbeafe");
+
+  // Keep ocean color consistent across the full viewport so perspective gaps
+  // near the edges do not show a white frame.
+  svg
+    .append("rect")
+    .attr("x", 0)
+    .attr("y", 0)
+    .attr("width", width)
+    .attr("height", height)
+    .attr("fill", "#dbeafe");
 
   // gPlane is the only layer that gets CSS 3D transform.
   const gPlane = svg.append("g").attr("class", "map-plane");
@@ -201,7 +209,11 @@ export async function renderLaunchMap({
     projection
       .scale(view.scale)
       .center(view.center)
-      .translate([width * 0.5, height * 0.58])
+      .translate([width * 0.5, height * 0.5])
+      .clipExtent([
+        [0, 0],
+        [width, height * 0.82],
+      ])
       .precision(0.5);
 
     gMapPlane.selectAll("*").remove();
@@ -215,7 +227,7 @@ export async function renderLaunchMap({
       .attr("y", 0)
       .attr("width", width)
       .attr("height", height)
-      .attr("fill", "#edf4ff");
+      .attr("fill", "#dbeafe");
 
     gMapPlane
       .append("path")
