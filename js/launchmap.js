@@ -64,42 +64,11 @@ const CONTINENT_VIEWS = {
 // Easy-to-tweak camera defaults.
 const CAMERA = {
   yawDeg: 45,
-  pitchDeg: 55,
-  perspectivePx: 900,
+  pitchDeg: 60,
 };
 
 const BAR_WIDTH = 10;
-const BAR_DEPTH = { dx: 6, dy: 6 }; // fake-3D prism depth offset in screen space
-
-function ensure3DStyles(containerSelector) {
-  if (document.getElementById("launchmap-3d-style")) return;
-
-  const style = document.createElement("style");
-  style.id = "launchmap-3d-style";
-  style.textContent = `
-    ${containerSelector} {
-      perspective: ${CAMERA.perspectivePx}px;
-      perspective-origin: center center;
-      position: relative;
-    }
-
-    ${containerSelector} svg.map3d {
-      transform-style: preserve-3d;
-      overflow: visible;
-      display: block;
-      max-width: 100%;
-      height: auto;
-    }
-
-    ${containerSelector} g.map-plane {
-      transform-style: preserve-3d;
-      transform-box: fill-box;
-      transform-origin: center center;
-      transform: rotateY(${CAMERA.yawDeg}deg) rotateX(${CAMERA.pitchDeg}deg);
-    }
-  `;
-  document.head.appendChild(style);
-}
+const BAR_DEPTH = { dx: 6, dy: 6 };
 
 function normalizeSiteCode(value) {
   return String(value ?? "")
@@ -125,26 +94,25 @@ function polygonPath(points) {
   return `M ${points.map((p) => `${p[0]},${p[1]}`).join(" L ")} Z`;
 }
 
-function nextFrame() {
+function waitForTransforms() {
   return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 }
 
-/**
- * Convert a circle's local (cx, cy) to the root SVG coordinate system,
- * accounting for CSS/SVG transforms already applied to ancestors.
- */
-function circleLocalToSvgPoint(svgNode, circleNode) {
-  const dotCTM = circleNode.getScreenCTM();
-  const svgScreenCTM = svgNode.getScreenCTM();
-  if (!dotCTM || !svgScreenCTM) return null;
+function dotScreenCenterToSvg(dotNode, svgNode, viewWidth, viewHeight) {
+  const dotRect = dotNode.getBoundingClientRect();
+  const svgRect = svgNode.getBoundingClientRect();
 
-  const localPoint = svgNode.createSVGPoint();
-  localPoint.x = Number(circleNode.getAttribute("cx")) || 0;
-  localPoint.y = Number(circleNode.getAttribute("cy")) || 0;
+  if (!dotRect.width || !dotRect.height || !svgRect.width || !svgRect.height) {
+    return null;
+  }
 
-  const screenPoint = localPoint.matrixTransform(dotCTM);
-  const svgPoint = screenPoint.matrixTransform(svgScreenCTM.inverse());
-  return { x: svgPoint.x, y: svgPoint.y };
+  const screenX = dotRect.left + dotRect.width / 2;
+  const screenY = dotRect.top + dotRect.height / 2;
+
+  return {
+    x: ((screenX - svgRect.left) * viewWidth) / svgRect.width,
+    y: ((screenY - svgRect.top) * viewHeight) / svgRect.height,
+  };
 }
 
 export async function renderLaunchMap({
@@ -156,8 +124,6 @@ export async function renderLaunchMap({
   width = 1100,
   height = 680,
 } = {}) {
-  ensure3DStyles(containerSelector);
-
   const container = d3.select(containerSelector);
   const dropdown = d3.select(dropdownSelector);
   container.selectAll("*").remove();
@@ -170,15 +136,17 @@ export async function renderLaunchMap({
     .attr("viewBox", `0 0 ${width} ${height}`)
     .style("background", "#f8fbff");
 
-  // Layer split:
-  // - map-plane (tilted): map + dots
-  // - bars/labels (untilted): upright bars + labels in screen coordinates
+  // gPlane is the only layer that gets CSS 3D transform.
   const gPlane = svg.append("g").attr("class", "map-plane");
   const gMapPlane = gPlane.append("g").attr("class", "map-land");
   const gDots = gPlane.append("g").attr("class", "map-dots");
 
-  const gBars = svg.append("g").attr("class", "bars-screen");
-  const gLabels = svg.append("g").attr("class", "labels-screen");
+  // Overlay layers stay untransformed so bars remain upright in screen space.
+  const gBarsOverlay = svg.append("g").attr("class", "bars-overlay");
+  const gLabelsOverlay = svg.append("g").attr("class", "labels-overlay");
+
+  gPlane.node().style.transformOrigin = "center";
+  gPlane.node().style.transform = `rotateY(${CAMERA.yawDeg}deg) rotateX(${CAMERA.pitchDeg}deg)`;
 
   const projection = d3.geoMercator();
   const geoPath = d3.geoPath(projection);
@@ -214,8 +182,8 @@ export async function renderLaunchMap({
 
     gMapPlane.selectAll("*").remove();
     gDots.selectAll("*").remove();
-    gBars.selectAll("*").remove();
-    gLabels.selectAll("*").remove();
+    gBarsOverlay.selectAll("*").remove();
+    gLabelsOverlay.selectAll("*").remove();
 
     gMapPlane
       .append("rect")
@@ -268,13 +236,11 @@ export async function renderLaunchMap({
       );
     }
 
-    // Dots are on the tilted map plane.
-    const dotSelection = gDots
+    const dots = gDots
       .selectAll("circle.site")
       .data(projectedSites, (d) => d.site)
       .join("circle")
       .attr("class", "site")
-      .attr("data-site", (d) => d.site)
       .attr("cx", (d) => d.x)
       .attr("cy", (d) => d.y)
       .attr("r", 5)
@@ -282,30 +248,28 @@ export async function renderLaunchMap({
       .attr("stroke", "#2f8d4d")
       .attr("stroke-width", 1);
 
-    // Wait for layout so CSS 3D transform has taken effect before measurement.
-    await nextFrame();
+    // Wait until CSS 3D transform is applied, then sample visual dot positions.
+    await waitForTransforms();
 
-    // Convert visually transformed dot positions back into SVG coordinates for upright bars.
     const svgNode = svg.node();
     const baseBySite = new Map();
 
-    dotSelection.each(function (d) {
-      const pt = circleLocalToSvgPoint(svgNode, this);
-      if (pt) baseBySite.set(d.site, pt);
+    dots.each(function (d) {
+      const base = dotScreenCenterToSvg(this, svgNode, width, height);
+      if (base) baseBySite.set(d.site, base);
     });
 
     const barsData = projectedSites
       .map((d) => {
         const base = baseBySite.get(d.site);
-        if (!base) return null;
-        return { ...d, baseX: base.x, baseY: base.y };
+        return base ? { ...d, baseX: base.x, baseY: base.y } : null;
       })
       .filter(Boolean);
 
     const maxCount = d3.max(barsData, (d) => d.count) || 1;
     const barHeightScale = d3.scaleLinear().domain([0, maxCount]).range([0, 140]);
 
-    const bars = gBars
+    const bars = gBarsOverlay
       .selectAll("g.bar3d")
       .data(barsData, (d) => d.site)
       .join("g")
@@ -314,65 +278,49 @@ export async function renderLaunchMap({
     // Side face (darker)
     bars
       .append("path")
-      .attr("class", "bar-side")
       .attr("fill", "#c08f1d")
       .attr("stroke", "#9f7416")
       .attr("stroke-width", 0.5)
       .attr("d", (d) => {
         const h = barHeightScale(d.count);
-        const x = d.baseX;
-        const y = d.baseY;
-
-        const B = [x + BAR_WIDTH / 2, y];
-        const C = [x + BAR_WIDTH / 2, y - h];
+        const B = [d.baseX + BAR_WIDTH / 2, d.baseY];
+        const C = [d.baseX + BAR_WIDTH / 2, d.baseY - h];
         const B2 = [B[0] + BAR_DEPTH.dx, B[1] + BAR_DEPTH.dy];
         const C2 = [C[0] + BAR_DEPTH.dx, C[1] + BAR_DEPTH.dy];
-
         return polygonPath([B, B2, C2, C]);
       });
 
     // Front face (main)
     bars
       .append("path")
-      .attr("class", "bar-front")
       .attr("fill", "#f2c14c")
       .attr("stroke", "#b98a12")
       .attr("stroke-width", 0.6)
       .attr("d", (d) => {
         const h = barHeightScale(d.count);
-        const x = d.baseX;
-        const y = d.baseY;
-
-        const A = [x - BAR_WIDTH / 2, y];
-        const B = [x + BAR_WIDTH / 2, y];
-        const C = [x + BAR_WIDTH / 2, y - h];
-        const D = [x - BAR_WIDTH / 2, y - h];
-
+        const A = [d.baseX - BAR_WIDTH / 2, d.baseY];
+        const B = [d.baseX + BAR_WIDTH / 2, d.baseY];
+        const C = [d.baseX + BAR_WIDTH / 2, d.baseY - h];
+        const D = [d.baseX - BAR_WIDTH / 2, d.baseY - h];
         return polygonPath([A, B, C, D]);
       });
 
     // Top face (lighter)
     bars
       .append("path")
-      .attr("class", "bar-top")
       .attr("fill", "#ffd978")
       .attr("stroke", "#c59c33")
       .attr("stroke-width", 0.5)
       .attr("d", (d) => {
         const h = barHeightScale(d.count);
-        const x = d.baseX;
-        const y = d.baseY;
-
-        const C = [x + BAR_WIDTH / 2, y - h];
-        const D = [x - BAR_WIDTH / 2, y - h];
+        const C = [d.baseX + BAR_WIDTH / 2, d.baseY - h];
+        const D = [d.baseX - BAR_WIDTH / 2, d.baseY - h];
         const C2 = [C[0] + BAR_DEPTH.dx, C[1] + BAR_DEPTH.dy];
         const D2 = [D[0] + BAR_DEPTH.dx, D[1] + BAR_DEPTH.dy];
-
         return polygonPath([D, C, C2, D2]);
       });
 
-    // Exact launch count above each bar.
-    gLabels
+    gLabelsOverlay
       .selectAll("text.count-label")
       .data(barsData, (d) => d.site)
       .join("text")
@@ -384,7 +332,7 @@ export async function renderLaunchMap({
       .attr("font-weight", 700)
       .attr("fill", "#1f2937");
 
-    gLabels
+    gLabelsOverlay
       .selectAll("text.site-label")
       .data(barsData, (d) => d.site)
       .join("text")
@@ -395,7 +343,7 @@ export async function renderLaunchMap({
       .attr("font-size", 11)
       .attr("fill", "#374151");
 
-    gLabels
+    gLabelsOverlay
       .append("text")
       .attr("x", 20)
       .attr("y", 30)
@@ -404,16 +352,16 @@ export async function renderLaunchMap({
       .attr("fill", "#14213d")
       .text(`Launch Sites in ${continent}`);
 
-    gLabels
+    gLabelsOverlay
       .append("text")
       .attr("x", 20)
       .attr("y", 52)
       .attr("font-size", 12)
       .attr("fill", "#4b5563")
-      .text("Tilted map plane + upright 3D bars (count labels are exact)");
+      .text("Map plane uses CSS perspective; bars stay upright in overlay");
 
     if (missingCodes.length) {
-      gLabels
+      gLabelsOverlay
         .append("text")
         .attr("x", 20)
         .attr("y", 72)
