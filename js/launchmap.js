@@ -61,8 +61,45 @@ const CONTINENT_VIEWS = {
   Antarctica: { center: [0, -82], scale: 900 },
 };
 
+// Easy-to-tweak camera defaults.
+const CAMERA = {
+  yawDeg: 45,
+  pitchDeg: 55,
+  perspectivePx: 900,
+};
+
 const BAR_WIDTH = 10;
-const BAR_DEPTH = { dx: 6, dy: 6 }; // fake-3D extrusion depth in screen space
+const BAR_DEPTH = { dx: 6, dy: 6 }; // fake-3D prism depth offset in screen space
+
+function ensure3DStyles(containerSelector) {
+  if (document.getElementById("launchmap-3d-style")) return;
+
+  const style = document.createElement("style");
+  style.id = "launchmap-3d-style";
+  style.textContent = `
+    ${containerSelector} {
+      perspective: ${CAMERA.perspectivePx}px;
+      perspective-origin: center center;
+      position: relative;
+    }
+
+    ${containerSelector} svg.map3d {
+      transform-style: preserve-3d;
+      overflow: visible;
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+
+    ${containerSelector} g.map-plane {
+      transform-style: preserve-3d;
+      transform-box: fill-box;
+      transform-origin: center center;
+      transform: rotateY(${CAMERA.yawDeg}deg) rotateX(${CAMERA.pitchDeg}deg);
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 function normalizeSiteCode(value) {
   return String(value ?? "")
@@ -88,6 +125,28 @@ function polygonPath(points) {
   return `M ${points.map((p) => `${p[0]},${p[1]}`).join(" L ")} Z`;
 }
 
+function nextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+}
+
+/**
+ * Convert a circle's local (cx, cy) to the root SVG coordinate system,
+ * accounting for CSS/SVG transforms already applied to ancestors.
+ */
+function circleLocalToSvgPoint(svgNode, circleNode) {
+  const dotCTM = circleNode.getScreenCTM();
+  const svgScreenCTM = svgNode.getScreenCTM();
+  if (!dotCTM || !svgScreenCTM) return null;
+
+  const localPoint = svgNode.createSVGPoint();
+  localPoint.x = Number(circleNode.getAttribute("cx")) || 0;
+  localPoint.y = Number(circleNode.getAttribute("cy")) || 0;
+
+  const screenPoint = localPoint.matrixTransform(dotCTM);
+  const svgPoint = screenPoint.matrixTransform(svgScreenCTM.inverse());
+  return { x: svgPoint.x, y: svgPoint.y };
+}
+
 export async function renderLaunchMap({
   containerSelector = "#launchmap",
   dropdownSelector = "#continent",
@@ -97,28 +156,30 @@ export async function renderLaunchMap({
   width = 1100,
   height = 680,
 } = {}) {
+  ensure3DStyles(containerSelector);
+
   const container = d3.select(containerSelector);
   const dropdown = d3.select(dropdownSelector);
-
   container.selectAll("*").remove();
 
   const svg = container
     .append("svg")
+    .attr("class", "map3d")
     .attr("width", width)
     .attr("height", height)
     .attr("viewBox", `0 0 ${width} ${height}`)
-    .style("max-width", "100%")
-    .style("height", "auto")
-    .style("background", "#f9fbff");
+    .style("background", "#f8fbff");
 
-  // Root group for the entire plotted map. We apply skew/rotate here to get the oblique look.
-  const gRoot = svg.append("g").attr("class", "tilt-root");
-  const gMap = gRoot.append("g").attr("class", "map-layer");
-  const gBars = gRoot.append("g").attr("class", "bar-layer");
-  const gSites = gRoot.append("g").attr("class", "site-layer");
-  const gLabels = gRoot.append("g").attr("class", "label-layer");
+  // Layer split:
+  // - map-plane (tilted): map + dots
+  // - bars/labels (untilted): upright bars + labels in screen coordinates
+  const gPlane = svg.append("g").attr("class", "map-plane");
+  const gMapPlane = gPlane.append("g").attr("class", "map-land");
+  const gDots = gPlane.append("g").attr("class", "map-dots");
 
-  // Flat map projection; tilt effect comes from SVG transform, not projection distortion.
+  const gBars = svg.append("g").attr("class", "bars-screen");
+  const gLabels = svg.append("g").attr("class", "labels-screen");
+
   const projection = d3.geoMercator();
   const geoPath = d3.geoPath(projection);
 
@@ -142,7 +203,7 @@ export async function renderLaunchMap({
     : continentOptions[0] || "Asia";
   dropdown.property("value", initialContinent);
 
-  function draw(continent) {
+  async function draw(continent) {
     const view = CONTINENT_VIEWS[continent] || CONTINENT_VIEWS.Asia;
 
     projection
@@ -151,17 +212,12 @@ export async function renderLaunchMap({
       .translate([width * 0.5, height * 0.58])
       .precision(0.5);
 
-    // Visual tilt (oblique look) on the whole visualization stack.
-    const tx = width * 0.5;
-    const ty = height * 0.55;
-    gRoot.attr("transform", `translate(${tx},${ty}) skewX(-15) rotate(-8) translate(${-tx},${-ty})`);
-
-    gMap.selectAll("*").remove();
+    gMapPlane.selectAll("*").remove();
+    gDots.selectAll("*").remove();
     gBars.selectAll("*").remove();
-    gSites.selectAll("*").remove();
     gLabels.selectAll("*").remove();
 
-    gMap
+    gMapPlane
       .append("rect")
       .attr("x", 0)
       .attr("y", 0)
@@ -169,7 +225,7 @@ export async function renderLaunchMap({
       .attr("height", height)
       .attr("fill", "#edf4ff");
 
-    gMap
+    gMapPlane
       .append("path")
       .datum(d3.geoGraticule10())
       .attr("d", geoPath)
@@ -178,7 +234,7 @@ export async function renderLaunchMap({
       .attr("stroke-width", 0.7)
       .attr("opacity", 0.8);
 
-    gMap
+    gMapPlane
       .append("path")
       .datum(land)
       .attr("d", geoPath)
@@ -189,44 +245,36 @@ export async function renderLaunchMap({
     const siteCounts = buildSiteCounts(rows, continent);
     const missingCodes = [];
 
-    const plotted = siteCounts
+    const projectedSites = siteCounts
       .map((d) => {
         const lonLat = LAUNCH_SITE_COORDS[d.site];
-        if (!lonLat || lonLat.length !== 2 || !Number.isFinite(lonLat[0]) || !Number.isFinite(lonLat[1])) {
+        if (!lonLat || !Number.isFinite(lonLat[0]) || !Number.isFinite(lonLat[1])) {
           missingCodes.push(d.site);
           return null;
         }
 
-        const projected = projection(lonLat);
-        if (!projected) {
-          return null;
-        }
+        const p = projection(lonLat);
+        if (!p) return null;
 
-        return {
-          ...d,
-          x: projected[0],
-          y: projected[1],
-        };
+        return { site: d.site, count: d.count, x: p[0], y: p[1] };
       })
       .filter(Boolean)
       .filter((d) => d.x >= -80 && d.x <= width + 80 && d.y >= -80 && d.y <= height + 80);
 
-    if (missingCodes.length > 0) {
+    if (missingCodes.length) {
       const uniqueMissing = Array.from(new Set(missingCodes));
       console.warn(
         `[launchmap] Missing LAUNCH_SITE coordinates (${uniqueMissing.length}): ${uniqueMissing.join(", ")}`,
       );
     }
 
-    const maxCount = d3.max(plotted, (d) => d.count) || 1;
-    const barHeightScale = d3.scaleLinear().domain([0, maxCount]).range([0, 140]);
-
-    // Base dots (launch sites)
-    gSites
+    // Dots are on the tilted map plane.
+    const dotSelection = gDots
       .selectAll("circle.site")
-      .data(plotted, (d) => d.site)
+      .data(projectedSites, (d) => d.site)
       .join("circle")
       .attr("class", "site")
+      .attr("data-site", (d) => d.site)
       .attr("cx", (d) => d.x)
       .attr("cy", (d) => d.y)
       .attr("r", 5)
@@ -234,13 +282,36 @@ export async function renderLaunchMap({
       .attr("stroke", "#2f8d4d")
       .attr("stroke-width", 1);
 
-    const bars = gBars
-      .selectAll("g.bar-3d")
-      .data(plotted, (d) => d.site)
-      .join("g")
-      .attr("class", "bar-3d");
+    // Wait for layout so CSS 3D transform has taken effect before measurement.
+    await nextFrame();
 
-    // Side face (darker) first
+    // Convert visually transformed dot positions back into SVG coordinates for upright bars.
+    const svgNode = svg.node();
+    const baseBySite = new Map();
+
+    dotSelection.each(function (d) {
+      const pt = circleLocalToSvgPoint(svgNode, this);
+      if (pt) baseBySite.set(d.site, pt);
+    });
+
+    const barsData = projectedSites
+      .map((d) => {
+        const base = baseBySite.get(d.site);
+        if (!base) return null;
+        return { ...d, baseX: base.x, baseY: base.y };
+      })
+      .filter(Boolean);
+
+    const maxCount = d3.max(barsData, (d) => d.count) || 1;
+    const barHeightScale = d3.scaleLinear().domain([0, maxCount]).range([0, 140]);
+
+    const bars = gBars
+      .selectAll("g.bar3d")
+      .data(barsData, (d) => d.site)
+      .join("g")
+      .attr("class", "bar3d");
+
+    // Side face (darker)
     bars
       .append("path")
       .attr("class", "bar-side")
@@ -249,8 +320,8 @@ export async function renderLaunchMap({
       .attr("stroke-width", 0.5)
       .attr("d", (d) => {
         const h = barHeightScale(d.count);
-        const x = d.x;
-        const y = d.y;
+        const x = d.baseX;
+        const y = d.baseY;
 
         const B = [x + BAR_WIDTH / 2, y];
         const C = [x + BAR_WIDTH / 2, y - h];
@@ -260,7 +331,7 @@ export async function renderLaunchMap({
         return polygonPath([B, B2, C2, C]);
       });
 
-    // Front face (main yellow)
+    // Front face (main)
     bars
       .append("path")
       .attr("class", "bar-front")
@@ -269,8 +340,8 @@ export async function renderLaunchMap({
       .attr("stroke-width", 0.6)
       .attr("d", (d) => {
         const h = barHeightScale(d.count);
-        const x = d.x;
-        const y = d.y;
+        const x = d.baseX;
+        const y = d.baseY;
 
         const A = [x - BAR_WIDTH / 2, y];
         const B = [x + BAR_WIDTH / 2, y];
@@ -289,8 +360,8 @@ export async function renderLaunchMap({
       .attr("stroke-width", 0.5)
       .attr("d", (d) => {
         const h = barHeightScale(d.count);
-        const x = d.x;
-        const y = d.y;
+        const x = d.baseX;
+        const y = d.baseY;
 
         const C = [x + BAR_WIDTH / 2, y - h];
         const D = [x - BAR_WIDTH / 2, y - h];
@@ -300,27 +371,26 @@ export async function renderLaunchMap({
         return polygonPath([D, C, C2, D2]);
       });
 
-    // Exact count labels above the top face
+    // Exact launch count above each bar.
     gLabels
       .selectAll("text.count-label")
-      .data(plotted, (d) => d.site)
+      .data(barsData, (d) => d.site)
       .join("text")
       .attr("class", "count-label")
-      .attr("x", (d) => d.x + BAR_DEPTH.dx + 2)
-      .attr("y", (d) => d.y - barHeightScale(d.count) + BAR_DEPTH.dy - 8)
+      .attr("x", (d) => d.baseX + BAR_DEPTH.dx + 2)
+      .attr("y", (d) => d.baseY - barHeightScale(d.count) + BAR_DEPTH.dy - 8)
       .text((d) => d.count)
       .attr("font-size", 13)
       .attr("font-weight", 700)
       .attr("fill", "#1f2937");
 
-    // Site code labels near bar base
     gLabels
       .selectAll("text.site-label")
-      .data(plotted, (d) => d.site)
+      .data(barsData, (d) => d.site)
       .join("text")
       .attr("class", "site-label")
-      .attr("x", (d) => d.x + 8)
-      .attr("y", (d) => d.y + 15)
+      .attr("x", (d) => d.baseX + 8)
+      .attr("y", (d) => d.baseY + 15)
       .text((d) => d.site)
       .attr("font-size", 11)
       .attr("fill", "#374151");
@@ -340,9 +410,9 @@ export async function renderLaunchMap({
       .attr("y", 52)
       .attr("font-size", 12)
       .attr("fill", "#4b5563")
-      .text("Dot = launch site, 3D bar = launch count, top number = exact total");
+      .text("Tilted map plane + upright 3D bars (count labels are exact)");
 
-    if (missingCodes.length > 0) {
+    if (missingCodes.length) {
       gLabels
         .append("text")
         .attr("x", 20)
@@ -353,10 +423,10 @@ export async function renderLaunchMap({
     }
   }
 
-  draw(initialContinent);
+  await draw(initialContinent);
 
-  dropdown.on("change", (event) => {
+  dropdown.on("change", async (event) => {
     const selected = event?.target?.value || dropdown.property("value");
-    draw(selected);
+    await draw(selected);
   });
 }
