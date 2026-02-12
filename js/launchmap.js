@@ -2,43 +2,44 @@ import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
 import { feature } from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
 
 /**
- * Launch-site coordinate lookup table.
+ * Launch site coordinate lookup table.
  *
  * - Keys are LAUNCH_SITE codes from the CSV.
  * - Values are [longitude, latitude] in decimal degrees.
- * - Coordinates are approximate (good enough for map placement).
- * - Add new sites by appending: CODE: [lon, lat],
+ * - Coordinates are approximate and intended for visualization.
+ * - To add/update a site, add another line in the same format:
+ *     CODE: [lon, lat],
  */
 const LAUNCH_SITE_COORDS = {
-  // Requested Asia starter set (21)
-  PLMSC: [40.577, 62.925],
-  TYMSC: [63.305, 45.965],
-  TAISC: [111.614, 38.849],
-  JSC: [100.298, 40.96],
-  SRILR: [80.235, 13.719],
-  XICLF: [102.027, 28.246],
-  TANSC: [130.969, 30.375],
-  VOSTO: [128.333, 51.817],
-  KYMSC: [45.746, 48.586],
-  WSC: [110.951, 19.614],
-  KSCUT: [127.203, 34.432],
-  DLS: [99.941, 39.781],
-  YSLA: [120.959, 14.75],
-  NSC: [130.444, 31.251],
-  YAVNE: [34.746, 31.878],
-  SVOBO: [128.333, 51.817],
-  SEMLS: [46.305, 43.798],
-  SCSLA: [59.529, 22.272],
-  SMTS: [102.039, 47.59],
-  YUN: [100.23, 25.024],
-  WALES: [70.26, 31.22],
+  // --- Asia starter set requested (21 site codes) ---
+  PLMSC: [40.577, 62.925], // Plesetsk Cosmodrome (Russia)
+  TYMSC: [63.305, 45.965], // Baikonur Cosmodrome (Kazakhstan)
+  TAISC: [111.614, 38.849], // Taiyuan Satellite Launch Center (China)
+  JSC: [100.298, 40.96], // Jiuquan Satellite Launch Center (China)
+  SRILR: [80.235, 13.719], // Satish Dhawan Space Centre, Sriharikota (India)
+  XICLF: [102.027, 28.246], // Xichang Satellite Launch Center (China)
+  TANSC: [130.969, 30.375], // Tanegashima Space Center (Japan)
+  VOSTO: [128.333, 51.817], // Vostochny Cosmodrome (Russia)
+  KYMSC: [45.746, 48.586], // Kapustin Yar (Russia)
+  WSC: [110.951, 19.614], // Wenchang Space Launch Site (China)
+  KSCUT: [127.203, 34.432], // Naro Space Center, Goheung (South Korea)
+  DLS: [99.941, 39.781], // Dongfeng / Jiuquan area (China)
+  YSLA: [120.959, 14.75], // Approx. Luzon coastal launch area placeholder
+  NSC: [130.444, 31.251], // Uchinoura Space Center (Japan)
+  YAVNE: [34.746, 31.878], // Palmachim / Yavne area (Israel)
+  SVOBO: [128.333, 51.817], // Svobodny Cosmodrome (Russia)
+  SEMLS: [46.305, 43.798], // Approx. Semnan Space Center (Iran)
+  SCSLA: [59.529, 22.272], // Approx. Suborbital launch area near Oman/Arabian Sea
+  SMTS: [102.039, 47.59], // Approx. Sainshand region test site
+  YUN: [100.23, 25.024], // Approx. Yunnan region (China)
+  WALES: [70.26, 31.22], // Approx. western launch/test area in Pakistan
 
-  // Extra useful sites
-  AFETR: [-80.604, 28.608],
-  AFWTR: [-120.61, 34.742],
-  FRGUI: [-52.768, 5.236],
-  SNMLP: [-49.127, -5.284],
-  KOURO: [-52.65, 5.16],
+  // --- Helpful non-Asia defaults so other continents still work out-of-the-box ---
+  AFETR: [-80.604, 28.608], // Cape Canaveral (USA)
+  AFWTR: [-120.61, 34.742], // Vandenberg (USA)
+  FRGUI: [-52.768, 5.236], // Guiana Space Centre (French Guiana)
+  SNMLP: [-49.127, -5.284], // Alcantara Launch Center (Brazil)
+  KOURO: [-52.65, 5.16], // Alternate code sometimes used for Kourou
 };
 
 const VALID_CONTINENTS = [
@@ -51,6 +52,11 @@ const VALID_CONTINENTS = [
   "Antarctica",
 ];
 
+/**
+ * Flat-map view settings for each continent.
+ * center: [lon, lat]
+ * scale: mercator zoom level
+ */
 const CONTINENT_VIEWS = {
   Asia: { center: [95, 28], scale: 420 },
   Europe: { center: [18, 51], scale: 600 },
@@ -61,14 +67,8 @@ const CONTINENT_VIEWS = {
   Antarctica: { center: [0, -82], scale: 900 },
 };
 
-// Easy-to-tweak camera defaults.
-const CAMERA = {
-  yawDeg: 45,
-  pitchDeg: 60,
-};
-
-const BAR_WIDTH = 10;
-const BAR_DEPTH = { dx: 6, dy: 6 };
+// Vertical bars go straight upward from each site dot.
+const BAR_DIRECTION = { dx: 0, dy: -1 };
 
 function normalizeSiteCode(value) {
   return String(value ?? "")
@@ -77,7 +77,9 @@ function normalizeSiteCode(value) {
 }
 
 function buildSiteCounts(rows, continent) {
-  const filtered = rows.filter((row) => String(row.CONTINENT ?? "").trim() === continent);
+  const filtered = rows.filter(
+    (row) => String(row.CONTINENT || "").trim() === continent,
+  );
 
   return d3
     .rollups(
@@ -90,28 +92,21 @@ function buildSiteCounts(rows, continent) {
     .sort((a, b) => d3.descending(a.count, b.count));
 }
 
-function polygonPath(points) {
-  return `M ${points.map((p) => `${p[0]},${p[1]}`).join(" L ")} Z`;
-}
-
-function waitForTransforms() {
-  return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-}
-
-function dotScreenCenterToSvg(dotNode, svgNode, viewWidth, viewHeight) {
-  const dotRect = dotNode.getBoundingClientRect();
-  const svgRect = svgNode.getBoundingClientRect();
-
-  if (!dotRect.width || !dotRect.height || !svgRect.width || !svgRect.height) {
-    return null;
+function getExtentForProjectedSites(projectedSites, width, height) {
+  if (!projectedSites.length) {
+    return {
+      xMin: width * 0.2,
+      xMax: width * 0.8,
+      yMin: height * 0.25,
+      yMax: height * 0.75,
+    };
   }
 
-  const screenX = dotRect.left + dotRect.width / 2;
-  const screenY = dotRect.top + dotRect.height / 2;
-
   return {
-    x: ((screenX - svgRect.left) * viewWidth) / svgRect.width,
-    y: ((screenY - svgRect.top) * viewHeight) / svgRect.height,
+    xMin: d3.min(projectedSites, (d) => d.x),
+    xMax: d3.max(projectedSites, (d) => d.x),
+    yMin: d3.min(projectedSites, (d) => d.y),
+    yMax: d3.max(projectedSites, (d) => d.y),
   };
 }
 
@@ -126,37 +121,40 @@ export async function renderLaunchMap({
 } = {}) {
   const container = d3.select(containerSelector);
   const dropdown = d3.select(dropdownSelector);
+
   container.selectAll("*").remove();
 
   const svg = container
     .append("svg")
-    .attr("class", "map3d")
     .attr("width", width)
     .attr("height", height)
     .attr("viewBox", `0 0 ${width} ${height}`)
-    .style("background", "#f8fbff");
+    .style("max-width", "100%")
+    .style("height", "auto")
+    .style("background", "#fbfcff");
 
-  // gPlane is the only layer that gets CSS 3D transform.
-  const gPlane = svg.append("g").attr("class", "map-plane");
-  const gMapPlane = gPlane.append("g").attr("class", "map-land");
-  const gDots = gPlane.append("g").attr("class", "map-dots");
+  const gMap = svg.append("g").attr("class", "map-layer");
+  const gBars = svg.append("g").attr("class", "bar-layer");
+  const gSites = svg.append("g").attr("class", "site-layer");
+  const gLabels = svg.append("g").attr("class", "label-layer");
 
-  // Overlay layers stay untransformed so bars remain upright in screen space.
-  const gBarsOverlay = svg.append("g").attr("class", "bars-overlay");
-  const gLabelsOverlay = svg.append("g").attr("class", "labels-overlay");
-
-  gPlane.node().style.transformOrigin = "center";
-  gPlane.node().style.transform = `rotateY(${CAMERA.yawDeg}deg) rotateX(${CAMERA.pitchDeg}deg)`;
-
+  // Flat projection (not globe).
   const projection = d3.geoMercator();
   const geoPath = d3.geoPath(projection);
 
-  const [rows, topo] = await Promise.all([d3.csv(csvPath), d3.json(worldTopoPath)]);
+  const [rows, topo] = await Promise.all([
+    d3.csv(csvPath),
+    d3.json(worldTopoPath),
+  ]);
   const land = feature(topo, topo.objects.land);
 
   const validSet = new Set(VALID_CONTINENTS);
   const continentOptions = Array.from(
-    new Set(rows.map((d) => String(d.CONTINENT ?? "").trim()).filter((c) => validSet.has(c))),
+    new Set(
+      rows
+        .map((d) => String(d.CONTINENT ?? "").trim())
+        .filter((c) => validSet.has(c)),
+    ),
   ).sort((a, b) => VALID_CONTINENTS.indexOf(a) - VALID_CONTINENTS.indexOf(b));
 
   dropdown
@@ -171,210 +169,229 @@ export async function renderLaunchMap({
     : continentOptions[0] || "Asia";
   dropdown.property("value", initialContinent);
 
-  async function draw(continent) {
+  function draw(continent) {
     const view = CONTINENT_VIEWS[continent] || CONTINENT_VIEWS.Asia;
 
     projection
       .scale(view.scale)
       .center(view.center)
-      .translate([width * 0.5, height * 0.58])
+      .translate([width * 0.5, height * 0.57])
       .precision(0.5);
 
-    gMapPlane.selectAll("*").remove();
-    gDots.selectAll("*").remove();
-    gBarsOverlay.selectAll("*").remove();
-    gLabelsOverlay.selectAll("*").remove();
+    gMap.selectAll("*").remove();
+    gBars.selectAll("*").remove();
+    gSites.selectAll("*").remove();
+    gLabels.selectAll("*").remove();
 
-    gMapPlane
+    // Flat background rectangle and world map.
+    gMap
       .append("rect")
       .attr("x", 0)
       .attr("y", 0)
       .attr("width", width)
       .attr("height", height)
-      .attr("fill", "#edf4ff");
+      .attr("fill", "#eef4ff");
 
-    gMapPlane
+    gMap
       .append("path")
       .datum(d3.geoGraticule10())
       .attr("d", geoPath)
       .attr("fill", "none")
-      .attr("stroke", "#d4e1f5")
-      .attr("stroke-width", 0.7)
-      .attr("opacity", 0.8);
+      .attr("stroke", "#d6e2f7")
+      .attr("stroke-width", 0.6)
+      .attr("opacity", 0.7);
 
-    gMapPlane
+    gMap
       .append("path")
       .datum(land)
       .attr("d", geoPath)
-      .attr("fill", "#f3f8f0")
-      .attr("stroke", "#87a786")
+      .attr("fill", "#f5f8f2")
+      .attr("stroke", "#8ea78d")
       .attr("stroke-width", 0.8);
 
     const siteCounts = buildSiteCounts(rows, continent);
     const missingCodes = [];
 
-    const projectedSites = siteCounts
+    const plotted = siteCounts
       .map((d) => {
         const lonLat = LAUNCH_SITE_COORDS[d.site];
-        if (!lonLat || !Number.isFinite(lonLat[0]) || !Number.isFinite(lonLat[1])) {
+        if (
+          !lonLat ||
+          lonLat.length !== 2 ||
+          !Number.isFinite(lonLat[0]) ||
+          !Number.isFinite(lonLat[1])
+        ) {
           missingCodes.push(d.site);
           return null;
         }
 
-        const p = projection(lonLat);
-        if (!p) return null;
+        const projected = projection(lonLat);
+        if (!projected) {
+          return null;
+        }
 
-        return { site: d.site, count: d.count, x: p[0], y: p[1] };
+        return {
+          ...d,
+          lon: lonLat[0],
+          lat: lonLat[1],
+          x: projected[0],
+          y: projected[1],
+        };
       })
       .filter(Boolean)
-      .filter((d) => d.x >= -80 && d.x <= width + 80 && d.y >= -80 && d.y <= height + 80);
+      // avoid plotting points that land too far outside the viewport in this centered view
+      .filter(
+        (d) =>
+          d.x >= -50 && d.x <= width + 50 && d.y >= -50 && d.y <= height + 50,
+      );
 
-    if (missingCodes.length) {
+    if (missingCodes.length > 0) {
       const uniqueMissing = Array.from(new Set(missingCodes));
       console.warn(
         `[launchmap] Missing LAUNCH_SITE coordinates (${uniqueMissing.length}): ${uniqueMissing.join(", ")}`,
       );
     }
 
-    const dots = gDots
+    // Keep bars readable across small and large count ranges.
+    const maxCount = d3.max(plotted, (d) => d.count) || 1;
+    const barHeightScale = d3
+      .scaleSqrt()
+      .domain([0, maxCount])
+      .range([0, Math.max(80, Math.min(220, height * 0.28))]);
+
+    const barWidth = 10;
+    const nudge = 4;
+
+    gSites
       .selectAll("circle.site")
-      .data(projectedSites, (d) => d.site)
+      .data(plotted, (d) => d.site)
       .join("circle")
       .attr("class", "site")
       .attr("cx", (d) => d.x)
       .attr("cy", (d) => d.y)
-      .attr("r", 5)
-      .attr("fill", "#72de8f")
-      .attr("stroke", "#2f8d4d")
-      .attr("stroke-width", 1);
+      .attr("r", 5.5)
+      .attr("fill", "#71db8f")
+      .attr("stroke", "#2f8c4c")
+      .attr("stroke-width", 1.1)
+      .attr("opacity", 0.95);
 
-    // Wait until CSS 3D transform is applied, then sample visual dot positions.
-    await waitForTransforms();
-
-    const svgNode = svg.node();
-    const baseBySite = new Map();
-
-    dots.each(function (d) {
-      const base = dotScreenCenterToSvg(this, svgNode, width, height);
-      if (base) baseBySite.set(d.site, base);
-    });
-
-    const barsData = projectedSites
-      .map((d) => {
-        const base = baseBySite.get(d.site);
-        return base ? { ...d, baseX: base.x, baseY: base.y } : null;
-      })
-      .filter(Boolean);
-
-    const maxCount = d3.max(barsData, (d) => d.count) || 1;
-    const barHeightScale = d3.scaleLinear().domain([0, maxCount]).range([0, 140]);
-
-    const bars = gBarsOverlay
-      .selectAll("g.bar3d")
-      .data(barsData, (d) => d.site)
-      .join("g")
-      .attr("class", "bar3d");
-
-    // Side face (darker)
-    bars
-      .append("path")
-      .attr("fill", "#c08f1d")
-      .attr("stroke", "#9f7416")
-      .attr("stroke-width", 0.5)
-      .attr("d", (d) => {
-        const h = barHeightScale(d.count);
-        const B = [d.baseX + BAR_WIDTH / 2, d.baseY];
-        const C = [d.baseX + BAR_WIDTH / 2, d.baseY - h];
-        const B2 = [B[0] + BAR_DEPTH.dx, B[1] + BAR_DEPTH.dy];
-        const C2 = [C[0] + BAR_DEPTH.dx, C[1] + BAR_DEPTH.dy];
-        return polygonPath([B, B2, C2, C]);
-      });
-
-    // Front face (main)
-    bars
-      .append("path")
+    gBars
+      .selectAll("path.bar")
+      .data(plotted, (d) => d.site)
+      .join("path")
+      .attr("class", "bar")
       .attr("fill", "#f2c14c")
       .attr("stroke", "#b98a12")
-      .attr("stroke-width", 0.6)
+      .attr("stroke-width", 0.9)
+      .attr("opacity", 0.9)
       .attr("d", (d) => {
         const h = barHeightScale(d.count);
-        const A = [d.baseX - BAR_WIDTH / 2, d.baseY];
-        const B = [d.baseX + BAR_WIDTH / 2, d.baseY];
-        const C = [d.baseX + BAR_WIDTH / 2, d.baseY - h];
-        const D = [d.baseX - BAR_WIDTH / 2, d.baseY - h];
-        return polygonPath([A, B, C, D]);
+
+        const baseX = d.x;
+        const baseY = d.y;
+        const topX = baseX + BAR_DIRECTION.dx * h;
+        const topY = baseY + BAR_DIRECTION.dy * h;
+
+        // Perpendicular direction controls rectangle thickness.
+        const perpX = -BAR_DIRECTION.dy;
+        const perpY = BAR_DIRECTION.dx;
+
+        const a = [
+          baseX + perpX * (barWidth / 2),
+          baseY + perpY * (barWidth / 2),
+        ];
+        const b = [
+          baseX - perpX * (barWidth / 2),
+          baseY - perpY * (barWidth / 2),
+        ];
+        const c = [
+          topX - perpX * (barWidth / 2),
+          topY - perpY * (barWidth / 2),
+        ];
+        const d2 = [
+          topX + perpX * (barWidth / 2),
+          topY + perpY * (barWidth / 2),
+        ];
+
+        return `M ${a[0]},${a[1]} L ${b[0]},${b[1]} L ${c[0]},${c[1]} L ${d2[0]},${d2[1]} Z`;
       });
 
-    // Top face (lighter)
-    bars
-      .append("path")
-      .attr("fill", "#ffd978")
-      .attr("stroke", "#c59c33")
-      .attr("stroke-width", 0.5)
-      .attr("d", (d) => {
-        const h = barHeightScale(d.count);
-        const C = [d.baseX + BAR_WIDTH / 2, d.baseY - h];
-        const D = [d.baseX - BAR_WIDTH / 2, d.baseY - h];
-        const C2 = [C[0] + BAR_DEPTH.dx, C[1] + BAR_DEPTH.dy];
-        const D2 = [D[0] + BAR_DEPTH.dx, D[1] + BAR_DEPTH.dy];
-        return polygonPath([D, C, C2, D2]);
-      });
-
-    gLabelsOverlay
+    // Count labels near bar tops.
+    gLabels
       .selectAll("text.count-label")
-      .data(barsData, (d) => d.site)
+      .data(plotted, (d) => d.site)
       .join("text")
       .attr("class", "count-label")
-      .attr("x", (d) => d.baseX + BAR_DEPTH.dx + 2)
-      .attr("y", (d) => d.baseY - barHeightScale(d.count) + BAR_DEPTH.dy - 8)
+      .attr("x", (d) => d.x + 8)
+      .attr("y", (d) => d.y + BAR_DIRECTION.dy * barHeightScale(d.count) - 5)
       .text((d) => d.count)
       .attr("font-size", 13)
       .attr("font-weight", 700)
-      .attr("fill", "#1f2937");
+      .attr("fill", "#1f2430");
 
-    gLabelsOverlay
+    // Launch site code labels near each base dot.
+    gLabels
       .selectAll("text.site-label")
-      .data(barsData, (d) => d.site)
+      .data(plotted, (d) => d.site)
       .join("text")
       .attr("class", "site-label")
-      .attr("x", (d) => d.baseX + 8)
-      .attr("y", (d) => d.baseY + 15)
+      .attr("x", (d) => d.x + 7)
+      .attr("y", (d) => d.y + 17 + nudge)
       .text((d) => d.site)
       .attr("font-size", 11)
       .attr("fill", "#374151");
 
-    gLabelsOverlay
+    const extent = getExtentForProjectedSites(plotted, width, height);
+
+    gLabels
       .append("text")
       .attr("x", 20)
-      .attr("y", 30)
+      .attr("y", 32)
       .attr("font-size", 20)
       .attr("font-weight", 700)
-      .attr("fill", "#14213d")
+      .attr("fill", "#12213a")
       .text(`Launch Sites in ${continent}`);
 
-    gLabelsOverlay
+    gLabels
       .append("text")
       .attr("x", 20)
-      .attr("y", 52)
+      .attr("y", 54)
       .attr("font-size", 12)
-      .attr("fill", "#4b5563")
-      .text("Map plane uses CSS perspective; bars stay upright in overlay");
+      .attr("fill", "#41506b")
+      .text(
+        "Dot = launch site, vertical bar = launch count, top label = exact count",
+      );
 
-    if (missingCodes.length) {
-      gLabelsOverlay
+    if (missingCodes.length > 0) {
+      gLabels
         .append("text")
         .attr("x", 20)
-        .attr("y", 72)
+        .attr("y", 74)
         .attr("font-size", 12)
         .attr("fill", "#9f1239")
-        .text("Some site coordinates are missing. Open console for site codes to add.");
+        .text(
+          "Some site coordinates are missing. Check console for site codes to add.",
+        );
     }
+
+    // Optional lightweight frame around the active cluster area for readability.
+    gLabels
+      .append("rect")
+      .attr("x", Math.max(0, extent.xMin - 22))
+      .attr("y", Math.max(0, extent.yMin - 32))
+      .attr("width", Math.min(width, extent.xMax - extent.xMin + 44))
+      .attr("height", Math.min(height, extent.yMax - extent.yMin + 56))
+      .attr("fill", "none")
+      .attr("stroke", "#000000")
+      .attr("stroke-opacity", 0.06)
+      .attr("stroke-width", 1)
+      .lower();
   }
 
-  await draw(initialContinent);
+  draw(initialContinent);
 
-  dropdown.on("change", async (event) => {
+  dropdown.on("change", (event) => {
     const selected = event?.target?.value || dropdown.property("value");
-    await draw(selected);
+    draw(selected);
   });
 }
