@@ -7,7 +7,7 @@ const height = 500 - margin.top - margin.bottom;
 
 const container = d3.select("#manufacturer");
 
-// Create SVG using the project's preferred structure
+// Create SVG
 const svg = container.append("svg")
   .attr("width", width + margin.left + margin.right)
   .attr("height", height + margin.top + margin.bottom)
@@ -16,12 +16,12 @@ const svg = container.append("svg")
     .attr("transform", `translate(${margin.left},${margin.top})`);
 
 // Scales that will be updated
-const x = d3.scaleLinear().range([0, width]);
-const y = d3.scaleLinear().range([height, 0]);
+let x = d3.scaleLinear().range([0, width]);
+let y = d3.scaleLinear().range([height, 0]);
 
 // Axes
-const xAxis = d3.axisBottom(x).tickFormat(d3.format("d"));
-const yAxis = d3.axisLeft(y);
+let xAxis = d3.axisBottom(x).tickFormat(d3.format("d"));
+let yAxis = d3.axisLeft(y);
 
 // Axis groups
 const xAxisGroup = svg.append("g")
@@ -31,14 +31,14 @@ const xAxisGroup = svg.append("g")
 const yAxisGroup = svg.append("g")
   .attr("class", "y-axis axis");
 
-// Optional y-axis title
+// Axis titles
 const yAxisTitle = svg.append("text")
   .attr("class", "axis-title")
-  .attr("x", 0)
-  .attr("y", -15)
+  .attr("transform", "rotate(-90)")
+  .attr("x", -height / 2)
+  .attr("y", -45)
   .attr("text-anchor", "middle");
 
-// X-axis title placed under the axis
 const xAxisTitle = svg.append("text")
   .attr("class", "x-axis-title")
   .attr("x", width / 2)
@@ -47,19 +47,8 @@ const xAxisTitle = svg.append("text")
 
 let seriesGroup = svg.append("g").attr("class", "series");
 
-// Tooltip
 container.style("position", "relative");
-const tooltip = container.append("div")
-  .attr("class", "manufacturer-tooltip")
-  .style("position", "absolute")
-  .style("pointer-events", "none")
-  .style("background", "rgba(255,255,255,0.95)")
-  .style("border", "1px solid #999")
-  .style("padding", "6px 8px")
-  .style("font-size", "12px")
-  .style("box-shadow", "0 2px 6px rgba(0,0,0,0.15)")
-  .style("border-radius", "4px")
-  .style("display", "none");
+const tooltip = container.append("div").attr("class", "manufacturer-tooltip");
 
 // Data holder
 let _data = [];
@@ -69,7 +58,7 @@ Object.defineProperty(window, 'data', {
   set: function(value) { _data = value; updateVisualization(); }
 });
 
-
+// Dropdown
 const rankingSelect = d3.select("#ranking-type");
 if (!rankingSelect.empty()) {
   rankingSelect.on("change", updateVisualization);
@@ -80,11 +69,11 @@ if (!rankingSelect.empty()) {
   });
 }
 
-// Load TSV 
+// Loading data
 function loadData() {
   d3.tsv("data/satcat.tsv").then(raw => {
     const parsed = raw.map(d => {
-      const ldateRaw = d.LDate ?? d.LDATE ?? d.Ldate ?? d.LAUNCH_DATE ?? "";
+      const ldateRaw = d.LDate || "";
       let year = null;
       if (ldateRaw && typeof ldateRaw === 'string' && ldateRaw.length >= 4) {
         const y4 = ldateRaw.slice(0,4);
@@ -95,45 +84,59 @@ function loadData() {
         if (!isNaN(dt)) year = dt.getFullYear();
       }
 
-  const rawMan = d.Manufacturer;
+      // Selection of variables and cleaning for NAs
+      const rawMan = d.Manufacturer;
       const trimmedMan = rawMan && typeof rawMan === 'string' ? rawMan.trim() : "";
       const manufacturer = (trimmedMan && trimmedMan !== "-" && trimmedMan.toUpperCase() !== "N/A") ? trimmedMan : null;
+      const rawState = d.State;
+      const state = (rawState && typeof rawState === 'string' && rawState.trim()) ? rawState.trim() : null;
 
-      const rawOwner = d.Owner;
-      const owner = (rawOwner && typeof rawOwner === 'string' && rawOwner.trim()) ? rawOwner.trim() : "Unknown";
-
-        
-  const rawState = d.State;
-  const state = (rawState && typeof rawState === 'string' && rawState.trim()) ? rawState.trim() : owner;
-
-      return { ...d, year, manufacturer, owner, state };
+  return { ...d, year, manufacturer, state };
     }).filter(d => d.year !== null);
 
-    data = parsed;
-  }).catch(err => {
-    console.error("Error loading satcat.tsv:", err);
-    container.append("div").text("Failed to load satellite data. See console for details.");
-  });
+    _data = parsed;
+
+    // initialize year slider
+    const years = Array.from(new Set(_data.map(d => d.year))).sort((a, b) => a - b);
+    if (years.length > 0) {
+      const minY = years[0];
+      const maxY = years[years.length - 1];
+      const slider = d3.select("#year-slider");
+      const sliderVal = d3.select("#year-slider-value");
+      if (!slider.empty()) {
+        slider.attr("min", minY).attr("max", maxY).attr("step", 1).property("value", maxY);
+        sliderVal.text(maxY);
+        slider.on("input", () => {
+          sliderVal.text(slider.property("value"));
+          updateVisualization();
+        });
+      }
+    }
+    updateVisualization();
+  })
 }
 
 loadData();
+
 // UPDATE VIS FUNCTION
 function updateVisualization() {
-  if (!window.data || window.data.length === 0) return;
+  if (!_data || _data.length === 0) return;
 
-  const selected = d3.select("#ranking-type").property("value"); 
-
+  const selected = d3.select("#ranking-type").property("value");
   const groupKey = selected === 'owner' ? 'state' : 'manufacturer';
 
-
-  const years = Array.from(new Set(window.data.map(d => d.year))).sort((a, b) => a - b);
+  const years = Array.from(new Set(_data.map(d => d.year))).sort((a, b) => a - b);
   if (years.length === 0) return;
 
+  const slider = d3.select("#year-slider");
+  const selectedYear = slider.empty() ? years[years.length - 1] : +slider.property("value");
+  const visibleYears = years.filter(y => y <= selectedYear);
+  if (visibleYears.length === 0) return;
 
-  let groups = Array.from(new Set(window.data.map(d => d[groupKey]).filter(v => v !== null))).sort();
-
-
+  // build groups
+  let groups = Array.from(new Set(_data.map(d => d[groupKey]).filter(v => v !== null))).sort();
   if (groupKey === 'state' && !groups.includes('Unknown')) groups.push('Unknown');
+
 
   const counts = new Map();
   groups.forEach(g => {
@@ -142,43 +145,53 @@ function updateVisualization() {
     counts.set(g, m);
   });
 
-  window.data.forEach(d => {
+  _data.forEach(d => {
     const g = d[groupKey];
-    if (!g) return; 
+    if (!g) return;
     const map = counts.get(g);
     if (map) map.set(d.year, (map.get(d.year) || 0) + 1);
   });
 
+  // FILTERING FOR VISIBLE YEARS
   const series = groups.map(g => ({
     key: g,
-    values: years.map(y => ({ year: y, count: counts.get(g).get(y) }))
+    values: visibleYears.map(y => ({ year: y, count: counts.get(g).get(y) }))
   }));
-
 
   const totals = series.map(s => ({ key: s.key, total: d3.sum(s.values, v => v.count) }));
   totals.sort((a, b) => d3.descending(a.total, b.total));
-  const top = totals.slice(0, 15).map(d => d.key);
+  const top = totals.slice(0, 10).map(d => d.key);
 
-  const maxCount = d3.max(series, s => d3.max(s.values, v => v.count)) || 1;
+  const filteredSeries = series.filter(s => top.includes(s.key));
 
-  x.domain([years[0], years[years.length - 1]]);
-  y.domain([0, maxCount]).nice();
+  const maxCount = d3.max(filteredSeries, s => d3.max(s.values, v => v.count)) || 1;
 
-  const color = groups.length <= 10
-    ? d3.scaleOrdinal().domain(groups).range(d3.schemeCategory10)
-    : d3.scaleOrdinal().domain(groups).range(groups.map((_, i) => d3.interpolateRainbow(i / Math.max(1, groups.length - 1))));
+  // Filtering 
+  x.domain([visibleYears[0], visibleYears[visibleYears.length - 1]]);
 
-  xAxis.tickValues(years.filter((_, i) => {
-    const step = Math.ceil(years.length / 10);
+  y.domain([0, Math.ceil(1.1 * maxCount)]);
+
+  // color
+  const color = top.length <= 10
+    ? d3.scaleOrdinal().domain(top).range(d3.schemeCategory10)
+    : d3.scaleOrdinal().domain(top).range(top.map((_, i) => d3.interpolateRainbow(i / Math.max(1, top.length - 1))));
+
+  // Years every 5
+  xAxis.tickValues(visibleYears.filter((_, i) => {
+    const step = Math.ceil(visibleYears.length / 20);
     return (i % step) === 0;
   }));
 
   xAxisGroup.transition().duration(500).call(xAxis);
+
+  const yTickFormat = d => (d >= 1000 ? d3.format('.0s')(d) : d3.format('.0f')(d));
+  yAxis.ticks(6).tickFormat(yTickFormat);
   yAxisGroup.transition().duration(500).call(yAxis);
-  yAxisTitle.text("# of satellites");
+
+  yAxisTitle.text("Number of satellites");
   xAxisTitle.text("Launch Year");
 
-
+  // draw
   seriesGroup.selectAll("g.series-item").remove();
 
   const lineGen = d3.line()
@@ -187,7 +200,7 @@ function updateVisualization() {
     .y(d => y(d.count));
 
   const items = seriesGroup.selectAll("g.series-item")
-    .data(series, d => d.key)
+    .data(filteredSeries, d => d.key)
     .enter()
     .append("g")
       .attr("class", "series-item");
