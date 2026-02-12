@@ -59,6 +59,15 @@ const CONTINENT_VIEWS = {
   Oceania: { center: [145, -10], scale: 520 },
 };
 
+const CONTINENT_LABELS = [
+  { name: "Asia", lonLat: [90, 35] },
+  { name: "Europe", lonLat: [15, 52] },
+  { name: "Africa", lonLat: [20, 5] },
+  { name: "North America", lonLat: [-105, 45] },
+  { name: "South America", lonLat: [-60, -20] },
+  { name: "Oceania", lonLat: [140, -25] },
+];
+
 // Easy-to-tweak camera defaults.
 const CAMERA = {
   yawDeg: 15,
@@ -239,6 +248,35 @@ export async function renderLaunchMap({
       .attr("fill", "#f3f8f0")
       .attr("stroke", "#87a786")
       .attr("stroke-width", 0.8);
+
+    const projectedContinentLabels = CONTINENT_LABELS.map((label) => {
+      const point = projection(label.lonLat);
+      if (!point) return null;
+      return { ...label, x: point[0], y: point[1] };
+    })
+      .filter(Boolean)
+      .filter(
+        (d) =>
+          d.x >= -140 && d.x <= width + 140 && d.y >= -100 && d.y <= height + 100,
+      );
+
+    gMapPlane
+      .selectAll("text.continent-label")
+      .data(projectedContinentLabels, (d) => d.name)
+      .join("text")
+      .attr("class", "continent-label")
+      .attr("x", (d) => d.x)
+      .attr("y", (d) => d.y)
+      .attr("text-anchor", "middle")
+      .attr("dominant-baseline", "middle")
+      .attr("font-size", 15)
+      .attr("font-weight", 700)
+      .attr("fill", "#1f2937")
+      .attr("opacity", (d) => (d.name === continent ? 1 : 0.8))
+      .attr("stroke", "#f8fbff")
+      .attr("stroke-width", 3)
+      .attr("paint-order", "stroke")
+      .text((d) => d.name);
 
     const siteCounts = buildSiteCounts(rows, continent);
     const missingCodes = [];
