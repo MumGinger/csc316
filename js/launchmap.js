@@ -48,7 +48,6 @@ const VALID_CONTINENTS = [
   "North America",
   "South America",
   "Oceania",
-  "Antarctica",
 ];
 
 const CONTINENT_VIEWS = {
@@ -58,7 +57,6 @@ const CONTINENT_VIEWS = {
   "North America": { center: [-100, 40], scale: 420 },
   "South America": { center: [-60, -18], scale: 470 },
   Oceania: { center: [145, -23], scale: 520 },
-  Antarctica: { center: [0, -82], scale: 900 },
 };
 
 // Easy-to-tweak camera defaults.
@@ -139,7 +137,7 @@ export async function renderLaunchMap({
   worldTopoPath = "data/land-110m.json",
   defaultContinent = "Asia",
   width = 1100,
-  height = 680,
+  height = 800,
 } = {}) {
   const container = d3.select(containerSelector);
   const dropdown = d3.select(dropdownSelector);
@@ -152,6 +150,14 @@ export async function renderLaunchMap({
     .attr("height", height)
     .attr("viewBox", `0 0 ${width} ${height}`)
     .style("background", "#f8fbff");
+
+  svg
+    .append("rect")
+    .attr("x", 0)
+    .attr("y", 0)
+    .attr("width", width)
+    .attr("height", height)
+    .attr("fill", "#dbeafe");
 
   // gPlane is the only layer that gets CSS 3D transform.
   const gPlane = svg.append("g").attr("class", "map-plane");
@@ -215,14 +221,14 @@ export async function renderLaunchMap({
       .attr("y", 0)
       .attr("width", width)
       .attr("height", height)
-      .attr("fill", "#edf4ff");
+      .attr("fill", "#dbeafe");
 
     gMapPlane
       .append("path")
       .datum(d3.geoGraticule10())
       .attr("d", geoPath)
       .attr("fill", "none")
-      .attr("stroke", "#d4e1f5")
+      .attr("stroke", "#f8fbff")
       .attr("stroke-width", 0.7)
       .attr("opacity", 0.8);
 
