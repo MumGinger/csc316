@@ -10,35 +10,79 @@ import { feature } from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
  * - Add new sites by appending: CODE: [lon, lat],
  */
 const LAUNCH_SITE_COORDS = {
-  // Requested Asia starter set (21)
-  PLMSC: [40.577, 62.925],
-  TYMSC: [63.305, 45.965],
-  TAISC: [111.614, 38.849],
-  JSC: [100.298, 40.96],
-  SRILR: [80.235, 13.719],
-  XICLF: [102.027, 28.246],
-  TANSC: [130.969, 30.375],
-  VOSTO: [128.333, 51.817],
-  KYMSC: [45.746, 48.586],
-  WSC: [110.951, 19.614],
-  KSCUT: [127.203, 34.432],
-  DLS: [99.941, 39.781],
-  YSLA: [120.959, 14.75],
-  NSC: [130.444, 31.251],
-  YAVNE: [34.746, 31.878],
-  SVOBO: [128.333, 51.817],
-  SEMLS: [46.305, 43.798],
-  SCSLA: [59.529, 22.272],
-  SMTS: [102.039, 47.59],
-  YUN: [100.23, 25.024],
-  WALES: [70.26, 31.22],
+  // ===== United States =====
+  AFETR: [-80.604, 28.608], // Cape Canaveral, Florida
+  AFWTR: [-120.61, 34.742], // Vandenberg, California
+  WLPIS: [-75.466, 37.94], // Wallops Island, Virginia
+  KODAK: [-152.339, 57.435], // Kodiak, Alaska
+  WRAS: [-120.61, 34.742], // Western Range (Vandenberg)
+  ERAS: [-80.604, 28.608], // Eastern Range (Cape)
 
-  // Extra useful sites
-  AFETR: [-80.604, 28.608],
-  AFWTR: [-120.61, 34.742],
+  // ===== Russia / Kazakhstan =====
+  TYMSC: [63.305, 45.965], // Baikonur (Kazakhstan)
+  PLMSC: [40.577, 62.925], // Plesetsk
+  VOSTO: [128.333, 51.817], // Vostochny
+  SVOBO: [128.333, 51.817], // Svobodny
+  DLS: [59.529, 51.207], // Dombarovskiy
+  KYMSC: [45.746, 48.586], // Kapustin Yar
+
+  // ===== China =====
+  JSC: [100.298, 40.96], // Jiuquan
+  TAISC: [111.614, 38.849], // Taiyuan
+  XICLF: [102.027, 28.246], // Xichang
+  WSC: [110.951, 19.614], // Wenchang
+  SCSLA: [112.0, 16.0], // South China Sea (approx sea launch)
+  YSLA: [123.0, 35.0], // Yellow Sea (approx sea launch)
+
+  // ===== Japan =====
+  TANSC: [130.969, 30.375], // Tanegashima
+  KSCUT: [131.0, 31.25], // Uchinoura
+  SPKII: [135.0, 33.7], // Space Port Kii (approx)
+
+  // ===== Korea =====
+  NSC: [127.535, 34.431], // Naro
+  JJSLA: [126.5, 33.2], // Jeju Sea Launch
+
+  // ===== India =====
+  SRILR: [80.235, 13.719], // Sriharikota
+
+  // ===== Iran =====
+  SEMLS: [53.95, 35.234], // Semnan
+  SMTS: [55.55, 36.42], // Shahrud
+
+  // ===== Israel =====
+  YAVNE: [34.706, 31.878],
+
+  // ===== North Korea =====
+  YUN: [124.705, 39.66], // Sohae
+
+  // ===== Norway =====
+  ANDSP: [16.01, 69.29], // Andøya
+
+  // ===== Brazil =====
+  ALCLC: [-44.394, -2.373], // Alcântara
+
+  // ===== Australia / NZ =====
+  BOS: [148.27, -20.01], // Bowen
+  WOMRA: [136.505, -31.144], // Woomera
+  RLLB: [177.864, -39.261], // Rocket Lab Mahia
+
+  // ===== Algeria =====
+  HGSTR: [8.166, 30.833], // Hammaguira
+
+  // ===== Kenya (San Marco) =====
+  SNMLP: [40.303, -2.938],
+
+  // ===== French Guiana =====
   FRGUI: [-52.768, 5.236],
-  SNMLP: [-49.127, -5.284],
-  KOURO: [-52.65, 5.16],
+
+  // ===== Sea / Mobile Platforms =====
+  SEAL: [154.0, 0.0], // Sea Launch (Pacific approx)
+  SUBL: [0.0, 0.0], // Submarine (placeholder)
+  CAS: [-15.0, 28.0], // Canary Islands airspace approx
+
+  // ===== Unknown =====
+  UNK: [0, 0],
 };
 
 const VALID_CONTINENTS = [
@@ -65,7 +109,7 @@ const CONTINENT_LABELS = [
   { name: "Africa", lonLat: [10, 10] },
   { name: "North America", lonLat: [-105, 45] },
   { name: "South America", lonLat: [-60, -20] },
-  { name: "Oceania", lonLat: [140, -25] },
+  { name: "Oceania", lonLat: [130, -25] },
 ];
 
 // Easy-to-tweak camera defaults.
