@@ -15,7 +15,7 @@ const LAUNCH_SITE_COORDS = {
   PLMSC: [40.577, 62.925], // Plesetsk Cosmodrome (Russia)
   TYMSC: [63.305, 45.965], // Baikonur Cosmodrome (Kazakhstan)
   TAISC: [111.614, 38.849], // Taiyuan Satellite Launch Center (China)
-  JSC: [100.298, 40.960], // Jiuquan Satellite Launch Center (China)
+  JSC: [100.298, 40.96], // Jiuquan Satellite Launch Center (China)
   SRILR: [80.235, 13.719], // Satish Dhawan Space Centre, Sriharikota (India)
   XICLF: [102.027, 28.246], // Xichang Satellite Launch Center (China)
   TANSC: [130.969, 30.375], // Tanegashima Space Center (Japan)
@@ -24,22 +24,22 @@ const LAUNCH_SITE_COORDS = {
   WSC: [110.951, 19.614], // Wenchang Space Launch Site (China)
   KSCUT: [127.203, 34.432], // Naro Space Center, Goheung (South Korea)
   DLS: [99.941, 39.781], // Dongfeng / Jiuquan area (China)
-  YSLA: [120.959, 14.750], // Approx. Luzon coastal launch area placeholder
+  YSLA: [120.959, 14.75], // Approx. Luzon coastal launch area placeholder
   NSC: [130.444, 31.251], // Uchinoura Space Center (Japan)
   YAVNE: [34.746, 31.878], // Palmachim / Yavne area (Israel)
   SVOBO: [128.333, 51.817], // Svobodny Cosmodrome (Russia)
   SEMLS: [46.305, 43.798], // Approx. Semnan Space Center (Iran)
   SCSLA: [59.529, 22.272], // Approx. Suborbital launch area near Oman/Arabian Sea
-  SMTS: [102.039, 47.590], // Approx. Sainshand region test site
-  YUN: [100.230, 25.024], // Approx. Yunnan region (China)
-  WALES: [70.260, 31.220], // Approx. western launch/test area in Pakistan
+  SMTS: [102.039, 47.59], // Approx. Sainshand region test site
+  YUN: [100.23, 25.024], // Approx. Yunnan region (China)
+  WALES: [70.26, 31.22], // Approx. western launch/test area in Pakistan
 
   // --- Helpful non-Asia defaults so other continents still work out-of-the-box ---
   AFETR: [-80.604, 28.608], // Cape Canaveral (USA)
-  AFWTR: [-120.610, 34.742], // Vandenberg (USA)
+  AFWTR: [-120.61, 34.742], // Vandenberg (USA)
   FRGUI: [-52.768, 5.236], // Guiana Space Centre (French Guiana)
   SNMLP: [-49.127, -5.284], // Alcantara Launch Center (Brazil)
-  KOURO: [-52.650, 5.160], // Alternate code sometimes used for Kourou
+  KOURO: [-52.65, 5.16], // Alternate code sometimes used for Kourou
 };
 
 const VALID_CONTINENTS = [
@@ -52,23 +52,23 @@ const VALID_CONTINENTS = [
   "Antarctica",
 ];
 
+/**
+ * Flat-map view settings for each continent.
+ * center: [lon, lat]
+ * scale: mercator zoom level
+ */
 const CONTINENT_VIEWS = {
-  Asia: { rotate: [-95, -20], scale: 330 },
-  Europe: { rotate: [-15, -43], scale: 420 },
-  Africa: { rotate: [-20, 5], scale: 360 },
-  "North America": { rotate: [100, -25], scale: 340 },
-  "South America": { rotate: [62, 12], scale: 370 },
-  Oceania: { rotate: [-150, 15], scale: 420 },
-  Antarctica: { rotate: [0, 90], scale: 290 },
+  Asia: { center: [95, 28], scale: 420 },
+  Europe: { center: [18, 51], scale: 600 },
+  Africa: { center: [20, 5], scale: 420 },
+  "North America": { center: [-100, 40], scale: 420 },
+  "South America": { center: [-60, -18], scale: 470 },
+  Oceania: { center: [145, -23], scale: 520 },
+  Antarctica: { center: [0, -82], scale: 900 },
 };
 
-// Unit vector controlling bar angle in screen space (up and slightly right).
-const BAR_DIRECTION = (() => {
-  const dx = 0.55;
-  const dy = -1;
-  const length = Math.hypot(dx, dy) || 1;
-  return { dx: dx / length, dy: dy / length };
-})();
+// Vertical bars go straight upward from each site dot.
+const BAR_DIRECTION = { dx: 0, dy: -1 };
 
 function normalizeSiteCode(value) {
   return String(value ?? "")
@@ -136,7 +136,8 @@ export async function renderLaunchMap({
   const gSites = svg.append("g").attr("class", "site-layer");
   const gLabels = svg.append("g").attr("class", "label-layer");
 
-  const projection = d3.geoOrthographic();
+  // Flat projection (not globe).
+  const projection = d3.geoMercator();
   const geoPath = d3.geoPath(projection);
 
   const [rows, topo] = await Promise.all([d3.csv(csvPath), d3.json(worldTopoPath)]);
@@ -164,9 +165,8 @@ export async function renderLaunchMap({
 
     projection
       .scale(view.scale)
-      .translate([width * 0.5, height * 0.56])
-      .rotate(view.rotate)
-      .clipAngle(90)
+      .center(view.center)
+      .translate([width * 0.5, height * 0.57])
       .precision(0.5);
 
     gMap.selectAll("*").remove();
@@ -174,14 +174,14 @@ export async function renderLaunchMap({
     gSites.selectAll("*").remove();
     gLabels.selectAll("*").remove();
 
-    // Globe background and graticule for visual context.
+    // Flat background rectangle and world map.
     gMap
-      .append("path")
-      .datum({ type: "Sphere" })
-      .attr("d", geoPath)
-      .attr("fill", "#eef4ff")
-      .attr("stroke", "#a5b8d6")
-      .attr("stroke-width", 1.1);
+      .append("rect")
+      .attr("x", 0)
+      .attr("y", 0)
+      .attr("width", width)
+      .attr("height", height)
+      .attr("fill", "#eef4ff");
 
     gMap
       .append("path")
@@ -212,7 +212,6 @@ export async function renderLaunchMap({
         }
 
         const projected = projection(lonLat);
-        // projection() returns null when clipped to far side of globe.
         if (!projected) {
           return null;
         }
@@ -225,7 +224,9 @@ export async function renderLaunchMap({
           y: projected[1],
         };
       })
-      .filter(Boolean);
+      .filter(Boolean)
+      // avoid plotting points that land too far outside the viewport in this centered view
+      .filter((d) => d.x >= -50 && d.x <= width + 50 && d.y >= -50 && d.y <= height + 50);
 
     if (missingCodes.length > 0) {
       const uniqueMissing = Array.from(new Set(missingCodes));
@@ -292,8 +293,8 @@ export async function renderLaunchMap({
       .data(plotted, (d) => d.site)
       .join("text")
       .attr("class", "count-label")
-      .attr("x", (d) => d.x + BAR_DIRECTION.dx * barHeightScale(d.count) + 8)
-      .attr("y", (d) => d.y + BAR_DIRECTION.dy * barHeightScale(d.count) - 2)
+      .attr("x", (d) => d.x + 8)
+      .attr("y", (d) => d.y + BAR_DIRECTION.dy * barHeightScale(d.count) - 5)
       .text((d) => d.count)
       .attr("font-size", 13)
       .attr("font-weight", 700)
@@ -328,7 +329,7 @@ export async function renderLaunchMap({
       .attr("y", 54)
       .attr("font-size", 12)
       .attr("fill", "#41506b")
-      .text("Dot = launch site, angled bar = launch count, top label = exact count");
+      .text("Dot = launch site, vertical bar = launch count, top label = exact count");
 
     if (missingCodes.length > 0) {
       gLabels
@@ -337,7 +338,7 @@ export async function renderLaunchMap({
         .attr("y", 74)
         .attr("font-size", 12)
         .attr("fill", "#9f1239")
-        .text(`Some site coordinates are missing. Check console for site codes to add.`);
+        .text("Some site coordinates are missing. Check console for site codes to add.");
     }
 
     // Optional lightweight frame around the active cluster area for readability.
