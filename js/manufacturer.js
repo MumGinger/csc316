@@ -92,7 +92,11 @@ function loadData() {
       const state = (rawState && typeof rawState === 'string' && rawState.trim()) ? rawState.trim() : null;
 
   return { ...d, year, manufacturer, state };
-    }).filter(d => d.year !== null);
+    }).filter(d => {
+      if (d.year === null) return false;
+      const t = d.Type && typeof d.Type === 'string' ? d.Type.trim().charAt(0).toUpperCase() : null;
+      return t === 'P';
+    });
 
     _data = parsed;
 
