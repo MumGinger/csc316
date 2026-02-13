@@ -1,5 +1,5 @@
 import { renderLaunchMap } from "./launchmap.js";
-
+//for launchmap
 renderLaunchMap({
   containerSelector: "#launchmap",
   dropdownSelector: "#continent",
