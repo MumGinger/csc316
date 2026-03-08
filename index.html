@@ -10,39 +10,97 @@
 </head>
 
 <body>
-    <header>
-        <h1>Super Cool Prototype Visualizations</h1>
-        <p>
-            <i>Lucas Helme, Daniel Benavides-Alvarez, Syed Salman Husainie,[your name here], ...</i>
-        </p>
-    </header>
-    <p>[filler]</p>
+    <main>
+        <header>
+            <h1>Space Traffic Is Crowding LEO!</h1>
+            <p>
+                <i>Lucas Helme, Daniel Benavides-Alvarez, Syed Salman Husainie, Ya-Ching Tang, Ryan Yi </i>
+            </p>
+            <p>
+                We show how Low Earth Orbit has become the most congested region, where debris growth and long lifespans
+                raise collision risks and amplify the Kessler effect.
+            </p>
+        </header>
 
-    <h2>Satellites by manufacturer / country</h2>
-    <label for="ranking-type">Plot by: </label>
-    <select id="ranking-type">
-        <option value="manufacturer" selected>Manufacturer</option>
-        <option value="owner">Country</option>
-    </select>
-    <div class="slider-row">
-        <label for="year-slider">Last year shown: <span id="year-slider-value">All</span></label>
-        <input id="year-slider" type="range" step="1">
-    </div>
-    <div id="manufacturer" class="center"></div>
-    <script type="module" src="js/manufacturer.js"></script>
+        <!-- HOOK -->
+        <section id="hook">
+            <h2>Hook — Satellites are staying up longer</h2>
+            <p>
+                Over time, satellites are retiring less often. Longer lifespans and delayed disposal mean objects
+                linger in LEO, keeping the region crowded.
+            </p>
+        </section>
 
-    <h2>Launch Sites</h2>
-    <div class="controls">
-        <label for="continent">Continent:</label>
-        <select id="continent"></select>
-    </div>
-    <div id="launchmap" class="center"></div>
-    <script type="module" src="js/launchmap_bootstrap.js"></script>
+        <!-- RISING INSIGHT #2 -->
+        <section id="insight-2">
+            <h2>Rising Insight — LEO is the most congested orbit</h2>
+            <p>
+                <strong>85–90% of cataloged objects are in Low Earth Orbit (LEO).</strong>
+                This is where critical infrastructure lives: the ISS, Starlink, Earth imaging, and science missions.
+                High utilization means higher collision risk, and unlike GEO, there is no strong incentive to move
+                objects to graveyard orbits.
+            </p>
+            <div id="leo-timeline" class="center"></div>
+            <script type="module" src="js/leo_timeline.js"></script>
+        </section>
 
-    <h2>LEO satellite timeline</h2>
-    <p>Slide through years to see how low Earth orbit becomes more crowded.</p>
-    <div id="leo-timeline" class="center"></div>
-    <script type="module" src="js/leo_timeline.js"></script>
+        <!-- RISING INSIGHT #1 -->
+        <section id="insight-1">
+            <h2>Rising Insight — 41.2% of tracked objects are debris &amp; rocket bodies</h2>
+            <p>
+                A large share of what we track is not active satellites. Debris and rocket bodies dominate the catalog,
+                setting the stage for cascading collisions.
+            </p>
+        </section>
+
+        <!-- CLIMAX -->
+        <section id="climax">
+            <h2>Climax — The Kessler Effect</h2>
+            <p>
+                Collisions create debris, debris creates more collisions. This chain reaction can make portions of LEO
+                increasingly unusable over time.
+            </p>
+        </section>
+
+        <!-- SUPPORTING CONTEXT -->
+        <section id="supporting">
+            <h2>Supporting Context — Who builds and launches?</h2>
+            <p>
+                To understand why LEO keeps filling up, we look at production and launch patterns by manufacturer,
+                country, and launch site.
+            </p>
+
+            <h3>Satellites by manufacturer / country</h3>
+            <label for="ranking-type">Plot by: </label>
+            <select id="ranking-type">
+                <option value="manufacturer" selected>Manufacturer</option>
+                <option value="owner">Country</option>
+            </select>
+            <div class="slider-row">
+                <label for="year-slider">Last year shown: <span id="year-slider-value">All</span></label>
+                <input id="year-slider" type="range" step="1">
+            </div>
+            <div id="manufacturer" class="center"></div>
+            <script type="module" src="js/manufacturer.js"></script>
+
+            <h3>Launch Sites</h3>
+            <div class="controls">
+                <label for="continent">Continent:</label>
+                <select id="continent"></select>
+            </div>
+            <div id="launchmap" class="center"></div>
+            <script type="module" src="js/main.js"></script>
+        </section>
+
+        <!-- RESOLUTION -->
+        <section id="resolution">
+            <h2>Resolution — A warning, not a verdict</h2>
+            <p>
+                LEO is not yet unusable, but current trends point toward rising collision risk. Debris accumulation
+                + dependence on LEO makes space pollution the central issue to address.
+            </p>
+        </section>
+    </main>
 
     <footer>
         <p>

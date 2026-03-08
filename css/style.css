@@ -34,3 +34,16 @@
   transform-style: preserve-3d;
   pointer-events: none; /* Let clicks pass to the map */
 }
+
+/* Make the LEO timeline full-bleed, not constrained by .center */
+#leo-timeline.center {
+  width: 100vw;
+  max-width: none;
+  margin-left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Ensure the SVG can fill the full-bleed container */
+#leo-timeline svg {
+  display: block;
+}
