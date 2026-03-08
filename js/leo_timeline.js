@@ -1,4 +1,4 @@
-﻿﻿import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+﻿import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
 import { feature } from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
 import {
   buildRankedLaunchSites,
@@ -522,9 +522,9 @@ async function init() {
       .select("circle.bar-anchor")
       .attr("cx", (d) => d.baseX)
       .attr("cy", (d) => d.baseY)
-      .attr("r", Math.max(1.8, state.currentR * 0.01))
-      .attr("fill", "#ffd166")
-      .attr("opacity", 0.85);
+      .attr("r", Math.max(1.2, state.currentR * 0.01))
+      .attr("fill", "#96ff66")
+      .attr("opacity", 0.65);
   }
 
   svg.on("pointermove", (event) => {
