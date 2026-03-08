@@ -26,7 +26,8 @@ const height = 900;
 const svg = sticky.append("svg")
   .attr("viewBox", `0 0 ${width} ${height}`)
   .style("width", "100%")
-  .style("height", "100%");
+  .style("height", "100%")
+  .style("cursor", "grab");
 
 const tEarthR = 300;
 const dEarthR = 45;
@@ -34,6 +35,14 @@ const tCy = height + 50;
 const dCy = height / 2;
 const timelineY = 820;
 const globeClipId = "leo-globe-clip";
+const AUTO_ROTATION_SPEED = 2.5;
+const DEFAULT_GLOBE_LAT = 12;
+const DEFAULT_GLOBE_LON_OFFSET = -25;
+const MANUAL_RETURN_DELAY = 1800;
+const DRAG_LON_SENSITIVITY = 0.28;
+const DRAG_LAT_SENSITIVITY = 0.22;
+const MAX_MANUAL_LAT = 80;
+const ROTATION_LERP = 0.08;
 
 const defs = svg.append("defs");
 defs.append("clipPath")
@@ -145,6 +154,20 @@ async function init() {
   const yearScale = d3.scaleLinear().domain([0.05, 0.65]).range([startYear, endYear]).clamp(true);
   const xTimeline = d3.scaleLinear().domain([startYear, endYear]).range([100, width - 100]);
 
+  const rotationState = {
+    displayLon: DEFAULT_GLOBE_LON_OFFSET,
+    displayLat: DEFAULT_GLOBE_LAT,
+    manualLon: DEFAULT_GLOBE_LON_OFFSET,
+    manualLat: DEFAULT_GLOBE_LAT,
+    dragging: false,
+    pointerId: null,
+    lastX: 0,
+    lastY: 0,
+    lastInteractionAt: -Infinity,
+  };
+
+  let latestSceneState = null;
+
   timelineG.append("line")
     .attr("x1", xTimeline(startYear)).attr("x2", xTimeline(endYear))
     .attr("y1", timelineY).attr("y2", timelineY)
@@ -213,6 +236,8 @@ async function init() {
   }
 
   function applySceneState(state) {
+    latestSceneState = state;
+
     yearText.text(Math.floor(state.currentYear)).style("opacity", Math.max(0, 1 - (state.zoomP * 2)));
     pinG.attr("transform", `translate(${xTimeline(Math.floor(state.currentYear))}, 0)`);
     pinText.text(Math.floor(state.currentYear));
@@ -242,10 +267,48 @@ async function init() {
       .attr("transform", `translate(${width / 2 - 15}, ${state.currentCy})`);
   }
 
+  function getPointerPosition(event) {
+    const bounds = svg.node().getBoundingClientRect();
+    return {
+      x: ((event.clientX - bounds.left) / bounds.width) * width,
+      y: ((event.clientY - bounds.top) / bounds.height) * height,
+    };
+  }
+
+  function isPointerOnGlobe(point, state) {
+    if (!state || state.globeOpacity < 0.08) return false;
+    const dx = point.x - width / 2;
+    const dy = point.y - state.currentCy;
+    return Math.hypot(dx, dy) <= state.currentR;
+  }
+
+  function setCursor(isDragging, isHoveringGlobe) {
+    svg.style("cursor", isDragging ? "grabbing" : (isHoveringGlobe ? "grab" : "default"));
+  }
+
+  function autoCenterLon(elapsed) {
+    return DEFAULT_GLOBE_LON_OFFSET + (elapsed / 1000) * AUTO_ROTATION_SPEED;
+  }
+
   function updateGlobe(elapsed, state) {
-    const centerLon = -25 + (elapsed / 1000) * 2.5;
-    const centerLat = 12;
-    const rotation = [-centerLon, -centerLat, 0];
+    const autoLon = autoCenterLon(elapsed);
+    const autoLat = DEFAULT_GLOBE_LAT;
+    const now = performance.now();
+    const returnToAuto = !rotationState.dragging && (now - rotationState.lastInteractionAt > MANUAL_RETURN_DELAY);
+
+    if (returnToAuto) {
+      rotationState.manualLon = autoLon;
+      rotationState.manualLat = autoLat;
+    }
+
+    rotationState.displayLon = wrapDegrees(rotationState.displayLon + shortestAngleDelta(rotationState.displayLon, rotationState.manualLon) * ROTATION_LERP);
+    rotationState.displayLat = clamp(
+      rotationState.displayLat + (rotationState.manualLat - rotationState.displayLat) * ROTATION_LERP,
+      -MAX_MANUAL_LAT,
+      MAX_MANUAL_LAT,
+    );
+
+    const rotation = [-rotationState.displayLon, -rotationState.displayLat, 0];
 
     globeProjection
       .translate([width / 2, state.currentCy])
@@ -257,7 +320,7 @@ async function init() {
 
     const visibleBars = globeSites
       .map((d) => {
-        const centerGeo = [-rotation[0], -rotation[1]];
+        const centerGeo = [rotationState.displayLon, rotationState.displayLat];
         const angularDistance = d3.geoDistance(d.lonLat, centerGeo);
         if (angularDistance >= Math.PI / 2 - 0.03) return null;
 
@@ -332,6 +395,60 @@ async function init() {
       .attr("opacity", 0.85);
   }
 
+  svg.on("pointermove", (event) => {
+    const point = getPointerPosition(event);
+
+    if (rotationState.dragging && event.pointerId === rotationState.pointerId) {
+      event.preventDefault();
+      const dx = point.x - rotationState.lastX;
+      const dy = point.y - rotationState.lastY;
+      rotationState.manualLon = wrapDegrees(rotationState.manualLon - (dx * DRAG_LON_SENSITIVITY));
+      rotationState.manualLat = clamp(rotationState.manualLat + (dy * DRAG_LAT_SENSITIVITY), -MAX_MANUAL_LAT, MAX_MANUAL_LAT);
+      rotationState.lastX = point.x;
+      rotationState.lastY = point.y;
+      rotationState.lastInteractionAt = performance.now();
+      setCursor(true, true);
+      return;
+    }
+
+    setCursor(false, isPointerOnGlobe(point, latestSceneState));
+  });
+
+  svg.on("pointerdown", (event) => {
+    const point = getPointerPosition(event);
+    if (!isPointerOnGlobe(point, latestSceneState)) return;
+
+    event.preventDefault();
+    rotationState.dragging = true;
+    rotationState.pointerId = event.pointerId;
+    rotationState.lastX = point.x;
+    rotationState.lastY = point.y;
+    rotationState.manualLon = rotationState.displayLon;
+    rotationState.manualLat = rotationState.displayLat;
+    rotationState.lastInteractionAt = performance.now();
+    svg.node().setPointerCapture(event.pointerId);
+    setCursor(true, true);
+  });
+
+  function endDrag(event) {
+    if (!rotationState.dragging || event.pointerId !== rotationState.pointerId) return;
+    if (svg.node().hasPointerCapture(event.pointerId)) {
+      svg.node().releasePointerCapture(event.pointerId);
+    }
+    rotationState.dragging = false;
+    rotationState.pointerId = null;
+    rotationState.lastInteractionAt = performance.now();
+    const point = getPointerPosition(event);
+    setCursor(false, isPointerOnGlobe(point, latestSceneState));
+  }
+
+  svg.on("pointerup", endDrag);
+  svg.on("pointercancel", endDrag);
+  svg.on("pointerleave", (event) => {
+    if (rotationState.dragging) return;
+    setCursor(false, false);
+  });
+
   window.addEventListener("scroll", () => {
     applySceneState(readSceneState());
   });
@@ -403,6 +520,18 @@ function polygonPath(points) {
   return `M ${points.map((p) => `${p[0]},${p[1]}`).join(" L ")} Z`;
 }
 
+function wrapDegrees(value) {
+  return ((value + 180) % 360 + 360) % 360 - 180;
+}
+
+function shortestAngleDelta(from, to) {
+  return wrapDegrees(to - from);
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function mulberry32(a) {
   return function () {
     let t = a += 0x6D2B79F5;
@@ -413,3 +542,4 @@ function mulberry32(a) {
 }
 
 init();
+
