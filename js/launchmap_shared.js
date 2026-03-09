@@ -77,6 +77,15 @@ export function normalizeSiteCode(value) {
     .toUpperCase();
 }
 
+export function parseLaunchYear(row) {
+  const rawDate = row.LAUNCH_DATE ?? row.Launch_Date ?? row.launch_date ?? null;
+  if (!rawDate) return null;
+
+  const parsed = new Date(rawDate);
+  const year = parsed.getUTCFullYear();
+  return Number.isFinite(year) ? year : null;
+}
+
 export function buildSiteCounts(rows, continent = null) {
   const filtered = continent
     ? rows.filter((row) => String(row.CONTINENT ?? "").trim() === continent)
@@ -122,4 +131,82 @@ export function buildRankedLaunchSites(
     })
     .filter(Boolean)
     .slice(0, limit);
+}
+
+export function buildCumulativeLaunchSiteCounts(
+  rows,
+  {
+    startYear = 1957,
+    endYear = 2025,
+    excludeSites = [],
+  } = {},
+) {
+  const excluded = new Set(excludeSites.map(normalizeSiteCode));
+  const incrementsByYear = new Map();
+  const siteMeta = new Map();
+  const firstActiveYearBySite = new Map();
+  const totalsBySite = new Map();
+
+  rows.forEach((row) => {
+    const year = parseLaunchYear(row);
+    const site = normalizeSiteCode(row.LAUNCH_SITE);
+    const lonLat = LAUNCH_SITE_COORDS[site];
+
+    if (!Number.isFinite(year) || year < startYear || year > endYear) return;
+    if (!site || excluded.has(site)) return;
+    if (!lonLat || !Number.isFinite(lonLat[0]) || !Number.isFinite(lonLat[1])) return;
+
+    siteMeta.set(site, {
+      site,
+      lon: lonLat[0],
+      lat: lonLat[1],
+      lonLat,
+    });
+
+    if (!incrementsByYear.has(year)) incrementsByYear.set(year, new Map());
+    const yearlyIncrements = incrementsByYear.get(year);
+    yearlyIncrements.set(site, (yearlyIncrements.get(site) || 0) + 1);
+
+    totalsBySite.set(site, (totalsBySite.get(site) || 0) + 1);
+
+    if (!firstActiveYearBySite.has(site) || year < firstActiveYearBySite.get(site)) {
+      firstActiveYearBySite.set(site, year);
+    }
+  });
+
+  const countsByYear = new Map();
+  const maxCountByYear = new Map();
+  const runningCounts = new Map(Array.from(siteMeta.keys(), (site) => [site, 0]));
+
+  for (let year = startYear; year <= endYear; year += 1) {
+    const yearlyIncrements = incrementsByYear.get(year);
+    if (yearlyIncrements) {
+      yearlyIncrements.forEach((increment, site) => {
+        runningCounts.set(site, (runningCounts.get(site) || 0) + increment);
+      });
+    }
+
+    const yearCounts = Array.from(runningCounts, ([site, count]) => {
+      if (count <= 0) return null;
+      return {
+        ...siteMeta.get(site),
+        count,
+        firstActiveYear: firstActiveYearBySite.get(site),
+      };
+    })
+      .filter(Boolean)
+      .sort((a, b) => d3.descending(a.count, b.count));
+
+    countsByYear.set(year, yearCounts);
+    maxCountByYear.set(year, yearCounts[0]?.count || 0);
+  }
+
+  return {
+    countsByYear,
+    maxCountByYear,
+    maxCount: d3.max(Array.from(totalsBySite.values())) || 1,
+    firstActiveYearBySite,
+    startYear,
+    endYear,
+  };
 }
