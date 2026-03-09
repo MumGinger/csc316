@@ -1,9 +1,6 @@
-﻿﻿import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+﻿import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
 import { feature } from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
-import {
-  buildRankedLaunchSites,
-  createBarHeightScale,
-} from "./launchmap_shared.js";
+import { buildCumulativeLaunchSiteCounts } from "./launchmap_shared.js";
 
 const mount = d3
   .select("#leo-timeline")
@@ -46,6 +43,9 @@ const DRAG_LON_SENSITIVITY = 0.28;
 const DRAG_LAT_SENSITIVITY = 0.22;
 const MAX_MANUAL_LAT = 80;
 const ROTATION_LERP = 0.08;
+const LAUNCH_START_YEAR = 1957;
+const MAX_GLOBE_SITES = 18;
+const BAR_SCALE_STABILITY = 0.35;
 
 const defs = svg.append("defs");
 defs
@@ -164,14 +164,17 @@ async function init() {
     .filter((d) => d !== null)
     .filter((d) => String(d.type ?? "").startsWith("P"));
 
-  const globeSites = buildRankedLaunchSites(launchRows)
-    .filter((d) => !["UNK", "SUBL"].includes(d.site))
-    .filter((d) => d.count > 1)
-    .slice(0, 18);
-  const barLengthScale = createBarHeightScale(globeSites, [0.18, 1]);
-
   const startYear = 1952;
   const endYear = 2025;
+
+  const launchSiteTimeline = buildCumulativeLaunchSiteCounts(launchRows, {
+    startYear: LAUNCH_START_YEAR,
+    endYear,
+    excludeSites: ["UNK", "SUBL"],
+  });
+  const cumulativeSiteCountsByYear = launchSiteTimeline.countsByYear;
+  const maxSiteCountByYear = launchSiteTimeline.maxCountByYear;
+  const globalLaunchSiteMaxCount = launchSiteTimeline.maxCount;
 
   const satelliteCountScale = d3
     .scaleLog()
@@ -445,7 +448,25 @@ async function init() {
     globeGraticule.attr("d", globePath(graticule));
     globeLand.attr("d", globePath(land));
 
-    const visibleBars = globeSites
+    const resolvedYear = Math.floor(state.currentYear);
+    const activeLaunchSites = resolvedYear < LAUNCH_START_YEAR
+      ? []
+      : (cumulativeSiteCountsByYear.get(Math.min(resolvedYear, endYear)) || []).slice(0, MAX_GLOBE_SITES);
+    const yearMaxCount = resolvedYear < LAUNCH_START_YEAR
+      ? 0
+      : (maxSiteCountByYear.get(Math.min(resolvedYear, endYear)) || 0);
+    const stabilizedMaxCount = Math.max(
+      yearMaxCount,
+      globalLaunchSiteMaxCount * BAR_SCALE_STABILITY,
+      1,
+    );
+    const yearBarLengthScale = d3
+      .scaleLinear()
+      .domain([0, stabilizedMaxCount])
+      .range([0.18, 1])
+      .clamp(true);
+
+    const visibleBars = activeLaunchSites
       .map((d) => {
         const centerGeo = [rotationState.displayLon, rotationState.displayLat];
         const angularDistance = d3.geoDistance(d.lonLat, centerGeo);
@@ -461,7 +482,7 @@ async function init() {
         const radialLength = Math.hypot(radialDx, radialDy) || 1;
         const ux = radialDx / radialLength;
         const uy = radialDy / radialLength;
-        const barLength = barLengthScale(d.count) * state.currentR * 0.34;
+        const barLength = yearBarLengthScale(d.count) * state.currentR * 0.34;
         const tipX = baseX + ux * barLength;
         const tipY = baseY + uy * barLength;
         const widthPx = Math.max(2.5, state.currentR * 0.018);
@@ -471,11 +492,10 @@ async function init() {
         return {
           ...d,
           depth: Math.cos(angularDistance),
+          faces,
           baseX,
           baseY,
-          tipX,
-          tipY,
-          faces,
+          isNewlyActive: d.firstActiveYear === resolvedYear,
         };
       })
       .filter(Boolean)
@@ -486,35 +506,35 @@ async function init() {
       .data(visibleBars, (d) => d.site)
       .join(
         (enter) => {
-          const g = enter.append("g").attr("class", "globe-bar");
+          const g = enter.append("g").attr("class", "globe-bar").style("opacity", 0);
           g.append("path").attr("class", "bar-side");
           g.append("path").attr("class", "bar-front");
           g.append("path").attr("class", "bar-cap");
           g.append("circle").attr("class", "bar-anchor");
-          return g;
+          return g.transition().duration(220).style("opacity", 1).selection();
         },
         (update) => update,
-        (exit) => exit.remove(),
+        (exit) => exit.transition().duration(180).style("opacity", 0).remove(),
       );
 
     bars
       .select("path.bar-side")
       .attr("d", (d) => d.faces.side)
-      .attr("fill", "rgba(191, 135, 23, 0.92)")
+      .attr("fill", (d) => d.isNewlyActive ? "rgba(219, 165, 44, 0.98)" : "rgba(191, 135, 23, 0.92)")
       .attr("stroke", "rgba(146, 101, 14, 0.95)")
       .attr("stroke-width", 0.6);
 
     bars
       .select("path.bar-front")
       .attr("d", (d) => d.faces.front)
-      .attr("fill", "rgba(242, 193, 76, 0.95)")
+      .attr("fill", (d) => d.isNewlyActive ? "rgba(255, 221, 114, 0.98)" : "rgba(242, 193, 76, 0.95)")
       .attr("stroke", "rgba(185, 138, 18, 0.95)")
       .attr("stroke-width", 0.7);
 
     bars
       .select("path.bar-cap")
       .attr("d", (d) => d.faces.cap)
-      .attr("fill", "rgba(255, 217, 120, 0.95)")
+      .attr("fill", (d) => d.isNewlyActive ? "rgba(255, 235, 158, 0.98)" : "rgba(255, 217, 120, 0.95)")
       .attr("stroke", "rgba(197, 156, 51, 0.95)")
       .attr("stroke-width", 0.5);
 
@@ -523,8 +543,8 @@ async function init() {
       .attr("cx", (d) => d.baseX)
       .attr("cy", (d) => d.baseY)
       .attr("r", Math.max(1.8, state.currentR * 0.01))
-      .attr("fill", "#ffd166")
-      .attr("opacity", 0.85);
+      .attr("fill", (d) => d.isNewlyActive ? "#fff0b3" : "#ffd166")
+      .attr("opacity", (d) => d.isNewlyActive ? 1 : 0.85);
   }
 
   svg.on("pointermove", (event) => {
@@ -583,7 +603,7 @@ async function init() {
 
   svg.on("pointerup", endDrag);
   svg.on("pointercancel", endDrag);
-  svg.on("pointerleave", (event) => {
+  svg.on("pointerleave", () => {
     if (rotationState.dragging) return;
     setCursor(false, false);
   });
