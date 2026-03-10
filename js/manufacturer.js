@@ -1,4 +1,5 @@
 import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+import Timeline from "./timeline.js";
 
 // Chart dimensions
 const margin = { top: 40, right: 10, bottom: 60, left: 60 };
@@ -7,7 +8,7 @@ const height = 500 - margin.top - margin.bottom;
 
 const container = d3.select("#manufacturer");
 
-// Create SVG
+// SVG
 const svg = container.append("svg")
   .attr("width", width + margin.left + margin.right)
   .attr("height", height + margin.top + margin.bottom)
@@ -52,6 +53,7 @@ const tooltip = container.append("div").attr("class", "manufacturer-tooltip");
 
 // Data holder
 let _data = [];
+window.currentBrushRange = null;
 
 Object.defineProperty(window, 'data', {
   get: function() { return _data; },
@@ -101,27 +103,32 @@ function loadData() {
 
     _data = parsed;
 
-    // initialize year slider
-    const years = Array.from(new Set(_data.map(d => d.year))).sort((a, b) => a - b);
-    if (years.length > 0) {
-      const minY = years[0];
-      const maxY = years[years.length - 1];
-      const slider = d3.select("#year-slider");
-      const sliderVal = d3.select("#year-slider-value");
-      if (!slider.empty()) {
-        slider.attr("min", minY).attr("max", maxY).attr("step", 1).property("value", maxY);
-        sliderVal.text(maxY);
-        slider.on("input", () => {
-          sliderVal.text(slider.property("value"));
-          updateVisualization();
-        });
-      }
+    const yearMap = d3.rollup(_data, v => v.length, d => d.year);
+    const yearData = Array.from(yearMap, ([year, count]) => ({ year: +year, count })).sort((a,b) => a.year - b.year);
+
+    try {
+      window.manufacturerTimeline = new Timeline('manufacturer-timeline', yearData);
+      window.manufacturerTimeline.initVis();
+    } catch (e) {
     }
+
     updateVisualization();
   })
 }
 
 loadData();
+
+// Brushed window
+window.brushed = function(selection) {
+  if (!selection) {
+    window.currentBrushRange = null;
+  } else {
+    const a = +selection[0];
+    const b = +selection[1];
+    window.currentBrushRange = (a <= b) ? [a, b] : [b, a];
+  }
+  updateVisualization();
+};
 
 // UPDATE VIS FUNCTION
 function updateVisualization() {
@@ -133,9 +140,11 @@ function updateVisualization() {
   const years = Array.from(new Set(_data.map(d => d.year))).sort((a, b) => a - b);
   if (years.length === 0) return;
 
-  const slider = d3.select("#year-slider");
-  const selectedYear = slider.empty() ? years[years.length - 1] : +slider.property("value");
-  const visibleYears = years.filter(y => y <= selectedYear);
+  // Determine visible years from brush selection (if any). If no brush, show all years.
+  let visibleYears = years;
+  if (window.currentBrushRange && window.currentBrushRange.length === 2) {
+    visibleYears = years.filter(y => y >= window.currentBrushRange[0] && y <= window.currentBrushRange[1]);
+  }
   if (visibleYears.length === 0) return;
 
   // build groups
