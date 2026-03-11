@@ -170,8 +170,6 @@ export default function initCrashViz(containerId = "crash-viz") {
           };
         });
 
-      // no progressPath transitions — keep arc static
-
       valueText.transition()
         .duration(1000)
         .tween("text", function() {
@@ -187,8 +185,6 @@ export default function initCrashViz(containerId = "crash-viz") {
     needleGroup.node().__value = d.days;
 
     dateText.text(d.label);
-
-    // center text updated above; no floating tooltip
   }
 
   async function playSequence() {
