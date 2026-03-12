@@ -28,51 +28,118 @@ export default function initCrashViz(containerId = "crash-viz") {
     .map(d => ({ ...d, dateObj: new Date(d.date) }))
     .sort((a, b) => a.dateObj - b.dateObj);
 
-  const outerWidth = Math.max(420, Math.min(920, container.node().getBoundingClientRect().width || 700));
-  const outerHeight = 520;
-  const margin = { top: 20, right: 30, bottom: 110, left: 30 };
-  const width = outerWidth - margin.left - margin.right;
-  const height = outerHeight - margin.top - margin.bottom;
+    const outerWidth = Math.max(420, Math.min(920, container.node().getBoundingClientRect().width || 700));
+    const outerHeight = 520;
+    const margin = { top: 36, right: 30, bottom: 36, left: 60 };
+    const width = outerWidth - margin.left - margin.right;
+    const height = outerHeight - margin.top - margin.bottom;
+    const lcHeight = Math.min(140, Math.floor(height * 0.38));
+    const lcWidth = width;
+    const availForGauge = Math.max(120, height - lcHeight - 20);
+    const radius = Math.min(width / 2.2, availForGauge * 0.9);
 
-  const radius = Math.min(width / 2.2, height * 0.95);
+    const svg = container.append("svg")
+      .attr("width", outerWidth)
+      .attr("height", outerHeight)
+      .style("display", "block")
+      .style("margin", "0 auto")
+      .style("font-family", "sans-serif")
+      .append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`);
 
-  container.append("h2")
-    .style("margin", "0 0 6px 0")
-    .style("font-family", "sans-serif")
-    .style("font-size", "22px")
-    .style("font-weight", "700")
-    .text("CRASH Clock: Time to Potential Collision in Low Earth Orbit");
+    const lcG = svg.append('g').attr('class', 'line-chart');
 
-  container.append("div")
-    .style("margin", "0 0 14px 0")
-    .style("font-family", "sans-serif")
-    .style("font-size", "14px")
-    .style("color", "#444")
-    .text("Expected time to a potential collision fell from 164 days in 2018 to 3.8 days by 26 January 2026");
+  const xLC = d3.scaleTime()
+    .domain(d3.extent(parsed, d => d.dateObj))
+    .range([0, lcWidth]);
 
-  const svg = container.append("svg")
-    .attr("width", outerWidth)
-    .attr("height", outerHeight)
-    .style("display", "block")
-    .style("margin", "0 auto");
+  const yLC = d3.scaleLinear()
+    .domain([0, d3.max(parsed, d => d.days)])
+    .range([lcHeight, 0]);
+
+  const xAxisLC = d3.axisBottom(xLC).ticks(d3.timeYear.every(1)).tickFormat(d3.timeFormat('%Y'));
+  const yAxisLC = d3.axisLeft(yLC).ticks(4);
+
+  const lineLC = d3.line()
+    .x(d => xLC(d.dateObj))
+    .y(d => yLC(d.days))
+    .curve(d3.curveMonotoneX);
+
+  lcG.append('path')
+    .datum(parsed)
+    .attr('d', lineLC)
+    .attr('fill', 'none')
+    .attr('stroke', '#eb1c1cff')
+    .attr('stroke-width', 2.5)
+    .attr('opacity', 0.95);
+
+  const xAxisG = lcG.append('g')
+    .attr('transform', `translate(0, ${lcHeight})`)
+    .call(xAxisLC);
+
+  xAxisG.selectAll('text')
+    .style('fill', '#ddd')
+    .style('font-size', '11px');
+
+  xAxisG.append('text')
+    .attr('x', lcWidth / 2)
+    .attr('y', 36)
+    .attr('text-anchor', 'middle')
+    .style('fill', '#ddd')
+    .attr('fill', '#ddd')
+    .style('font-family', 'sans-serif')
+    .style('font-size', '12px')
+    .text('years');
+
+  const yAxisG = lcG.append('g')
+    .call(yAxisLC);
+
+  yAxisG.selectAll('text')
+    .style('fill', '#ddd')
+    .style('font-size', '11px');
+
+  
+  yAxisG.append('text')
+    .attr('transform', `rotate(-90)`) 
+    .attr('x', -lcHeight / 2)
+    .attr('y', -40)
+    .attr('text-anchor', 'middle')
+    .style('fill', '#ddd')
+    .attr('fill', '#ddd')
+    .style('font-family', 'sans-serif')
+    .style('font-size', '12px')
+    .text('days');
+
+  const points = lcG.selectAll('circle.point')
+    .data(parsed)
+    .enter()
+    .append('circle')
+    .attr('class', 'point')
+    .attr('cx', d => xLC(d.dateObj))
+    .attr('cy', d => yLC(d.days))
+    .attr('r', 4.5)
+    .attr('fill', '#fff')
+    .attr('stroke', '#1a1a1a')
+    .attr('stroke-width', 1)
+    .style('cursor', 'pointer')
+    .on('mouseover', function(event, d) {
+      try { updateGauge(d, false); } catch (e) {}
+      d3.select(this).transition().duration(120).attr('r', 6);
+    })
+    .on('mouseout', function() {
+      d3.select(this).transition().duration(120).attr('r', 4.5);
+    });
 
   const g = svg.append("g")
-    .attr("transform", `translate(${outerWidth / 2}, ${margin.top + radius + 40})`);
+    .attr("transform", `translate(${width / 2}, ${lcHeight + radius + 20})`);
 
-  // no gradient defs — keep the arc minimal and neutral
 
   const daysMin = d3.min(parsed, d => d.days);
   const daysMax = d3.max(parsed, d => d.days);
 
-  // Left = max days, right = min days
-  // Top semicircle from -180° to 0°
   const angleScale = d3.scaleLinear()
     .domain([daysMax, daysMin])
     .range([-Math.PI, 0]);
-
-  // background arc removed — minimal gauge without arc
-
-  // no colored progress arc — minimal gauge only
 
   const tickValues = [164, 120, 100, 60, 25, 10, 3.8];
   const ticks = g.append("g");
@@ -92,7 +159,7 @@ export default function initCrashViz(containerId = "crash-viz") {
       .attr("y1", y1)
       .attr("x2", x2)
       .attr("y2", y2)
-      .attr("stroke", "#777")
+      .attr("stroke", "#bbb")
       .attr("stroke-width", 1.2);
 
     ticks.append("text")
@@ -101,7 +168,7 @@ export default function initCrashViz(containerId = "crash-viz") {
       .attr("text-anchor", "middle")
       .style("font-family", "sans-serif")
       .style("font-size", "11px")
-      .style("fill", "#333")
+      .style("fill", "#ddd")
       .text(value);
   });
 
@@ -113,14 +180,14 @@ export default function initCrashViz(containerId = "crash-viz") {
     .style("font-family", "sans-serif")
     .style("font-size", "34px")
     .style("font-weight", "700")
-    .style("fill", "#111");
+    .style("fill", "#fff");
 
   centerGroup.append("text")
     .attr("text-anchor", "middle")
     .attr("y", 18)
     .style("font-family", "sans-serif")
     .style("font-size", "13px")
-    .style("fill", "#555")
+    .style("fill", "#ccc")
     .text("expected time to potential collision");
 
   const dateText = centerGroup.append("text")
@@ -128,7 +195,7 @@ export default function initCrashViz(containerId = "crash-viz") {
     .attr("y", 40)
     .style("font-family", "sans-serif")
     .style("font-size", "13px")
-    .style("fill", "#666");
+    .style("fill", "#bbb");
 
   const needleGroup = g.append("g").attr("class", "needle");
 
@@ -137,15 +204,14 @@ export default function initCrashViz(containerId = "crash-viz") {
     .attr("y1", 0)
     .attr("x2", radius * 0.74)
     .attr("y2", 0)
-    .attr("stroke", "#222")
+    .attr("stroke", "#fff")
     .attr("stroke-width", 4)
     .attr("stroke-linecap", "round");
 
   needleGroup.append("circle")
     .attr("r", 8)
-    .attr("fill", "#222");
+    .attr("fill", "#fff");
 
-  // no floating tooltip — center text displays current date and value
 
   function updateGauge(d, instant = false) {
     const angle = angleScale(d.days);
@@ -196,13 +262,6 @@ export default function initCrashViz(containerId = "crash-viz") {
       }
     }
   }
-
-  container.append("div")
-    .style("margin", "14px 0 0 0")
-    .style("font-family", "sans-serif")
-    .style("font-size", "13px")
-    .style("color", "#333")
-    .text("The CRASH Clock is an environmental indicator of collision risk in low Earth orbit (LEO). It asks: if all manoeuvres were to stop, how long would it take until a potential collision occurs between tracked artificial objects, including satellites, debris, and abandoned rocket bodies?");
 
   updateGauge(parsed[0], true);
   playSequence().catch(() => {});
