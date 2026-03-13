@@ -83,3 +83,34 @@
 #leo-timeline svg {
   display: block;
 }
+
+/* Friction-point annotation popup */
+.leo-popup {
+  position: absolute;
+  top: 18%;
+  right: 5%;
+  max-width: 260px;
+  background: rgba(8, 18, 42, 0.92);
+  border: 1px solid rgba(120, 181, 255, 0.38);
+  border-radius: 10px;
+  padding: 14px 16px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  z-index: 10;
+  backdrop-filter: blur(6px);
+}
+
+.leo-popup__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ff9a76;
+  margin-bottom: 7px;
+  letter-spacing: 0.04em;
+}
+
+.leo-popup__body {
+  font-size: 12px;
+  line-height: 1.55;
+  color: rgba(220, 235, 255, 0.88);
+}

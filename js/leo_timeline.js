@@ -124,11 +124,36 @@ const rScaleGlobal = d3
   .range([dEarthR, width / 2 - 40]);
 
 const events = [
-  { year: 1957, label: "Sputnik 1" },
-  { year: 1962, label: "Telstar" },
-  { year: 1990, label: "Hubble" },
-  { year: 1998, label: "ISS" },
-  { year: 2019, label: "Starlink" },
+  {
+    year: 1957,
+    label: "Sputnik 1",
+    annotation:
+      "Oct 4, 1957: The Soviet Union launched Sputnik 1, the world's first artificial satellite. The 58 cm aluminum sphere orbited Earth every 96 minutes, transmitting a radio beep heard worldwide — marking the dawn of the Space Age.",
+  },
+  {
+    year: 1962,
+    label: "Telstar",
+    annotation:
+      "Jul 10, 1962: AT&T's Telstar 1 became the first active communications satellite, relaying the first live transatlantic TV pictures and telephone calls — transforming global communications and inspiring a worldwide hit song.",
+  },
+  {
+    year: 1990,
+    label: "Hubble",
+    annotation:
+      "Apr 24, 1990: Deployed by Space Shuttle Discovery, the Hubble Space Telescope revolutionized astronomy. After a 1993 corrective servicing mission it captured imagery spanning billions of light-years, reshaping our understanding of the universe.",
+  },
+  {
+    year: 1998,
+    label: "ISS",
+    annotation:
+      "Nov 20, 1998: Russia launched Zarya, the first ISS module. A joint project of 15 nations, the International Space Station has been continuously inhabited since Nov 2000 — the largest human-made structure ever placed in orbit.",
+  },
+  {
+    year: 2019,
+    label: "Starlink",
+    annotation:
+      "May 23, 2019: SpaceX launched its first 60 Starlink satellites, beginning the largest constellation in history. By 2025, over 6,000 Starlink satellites orbit Earth, providing global broadband and dramatically reshaping the orbital environment.",
+  },
 ];
 
 const globeProjection = d3.geoOrthographic().precision(0.4).clipAngle(90);
@@ -327,6 +352,12 @@ async function init() {
     .ticks(6)
     .tickFormat((d) => (d === 0 ? "" : `${d}km`));
   globalAxisLayer.append("g").call(globalAxis).style("color", "#ff9a76");
+
+  // Friction-point popup annotation overlay
+  const POPUP_WINDOW_YEARS = 2.5;
+  const popupDiv = sticky.append("div").attr("class", "leo-popup");
+  const popupTitle = popupDiv.append("div").attr("class", "leo-popup__title");
+  const popupBody = popupDiv.append("div").attr("class", "leo-popup__body");
 
   function readSceneState() {
     const rect = mount.node().getBoundingClientRect();
@@ -738,6 +769,27 @@ async function init() {
       .attr("transform", `translate(0, ${(1 - state.zoomP) * 20})`);
 
     updateGlobe(elapsed, state);
+
+    // Update friction-point popup
+    let activePopupEvent = null;
+    let minPopupDist = Infinity;
+    for (const ev of events) {
+      const dist = Math.abs(state.currentYear - ev.year);
+      if (dist < minPopupDist) {
+        minPopupDist = dist;
+        activePopupEvent = ev;
+      }
+    }
+    const popupOpacity =
+      minPopupDist < POPUP_WINDOW_YEARS
+        ? Math.max(0, 1 - minPopupDist / POPUP_WINDOW_YEARS) *
+          Math.max(0, 1 - state.zoomP * 2)
+        : 0;
+    if (minPopupDist < POPUP_WINDOW_YEARS) {
+      popupTitle.text(activePopupEvent.label);
+      popupBody.text(activePopupEvent.annotation);
+    }
+    popupDiv.style("opacity", popupOpacity);
 
     const drawnSats = activeSats.slice(0, Math.max(targetCount / 40, 1));
     const circles = satLayer.selectAll("circle").data(drawnSats, (d) => d.id);
