@@ -1,4 +1,4 @@
-import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+﻿import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
 import { feature } from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
 import {
   CONTINENT_LABELS,
@@ -22,6 +22,28 @@ const sticky = mount
   .style("margin-top", "0")
   .style("align-self", "start")
   .style("overflow", "hidden");
+
+const tooltip = sticky
+  .append("div")
+  .attr("class", "launch-site-tooltip")
+  .style("position", "absolute")
+  .style("left", "0")
+  .style("top", "0")
+  .style("transform", "translate(-9999px, -9999px)")
+  .style("pointer-events", "none")
+  .style("z-index", "5")
+  .style("min-width", "180px")
+  .style("max-width", "260px")
+  .style("padding", "10px 12px")
+  .style("border", "1px solid rgba(255, 209, 102, 0.35)")
+  .style("border-radius", "10px")
+  .style("background", "rgba(4, 10, 22, 0.92)")
+  .style("box-shadow", "0 12px 28px rgba(0, 0, 0, 0.35)")
+  .style("color", "#f8fbff")
+  .style("font-family", "system-ui, sans-serif")
+  .style("font-size", "12px")
+  .style("line-height", "1.35")
+  .style("opacity", "0");
 
 const width = 900;
 const height = 900;
@@ -48,12 +70,12 @@ const MAX_MANUAL_LAT = 80;
 const ROTATION_LERP = 0.08;
 const LAUNCH_START_YEAR = 1957;
 const MAX_GLOBE_SITES = 18;
-const BAR_SCALE_STABILITY = 0.35;
+const BAR_HEIGHT_MAX_RATIO = 0.3;
+const BAR_MIN_VISIBLE_COUNT = 12;
+const BAR_LABEL_MIN_COUNT = 100;
 const GLOBE_PHASE_END = 0.45;
 const DENSITY_PHASE_START = 0.75;
-const HANDOFF_GLOBE_FREEZE = 0.62;
 const DISPLAY_SCROLL_EASING = 0.14;
-const HANDOFF_GLOBE_GEOMETRY_INTERVAL = 90;
 const DENSITY_RING_COUNT = 96;
 
 const defs = svg.append("defs");
@@ -185,7 +207,6 @@ async function init() {
     excludeSites: ["UNK", "SUBL"],
   });
   const cumulativeSiteCountsByYear = launchSiteTimeline.countsByYear;
-  const maxSiteCountByYear = launchSiteTimeline.maxCountByYear;
   const globalLaunchSiteMaxCount = launchSiteTimeline.maxCount;
 
   const satelliteCountScale = d3
@@ -218,16 +239,12 @@ async function init() {
   };
 
   let latestSceneState = null;
-  const activeLeoByYear = new Map();
   let targetScrollP = readScrollProgress();
   let displayScrollP = targetScrollP;
   let lastFrameAt = performance.now();
   let lastVisibleSatelliteYear = null;
   let lastVisibleSatellites = [];
-  let lastLaunchBarKey = null;
-  let projectedGlobeState = null;
-  let lastProjectedRotation = null;
-  let lastGlobeGeometryAt = -Infinity;
+  let hoveredLaunchSiteCode = null;
 
   timelineG
     .append("line")
@@ -281,7 +298,10 @@ async function init() {
     .domain([0, 40000])
     .thresholds(DENSITY_RING_COUNT)(processedData.map((d) => d.altitude))
     .filter((b) => b.length > 0);
-  const densityArc = d3.arc().startAngle(0).endAngle(2 * Math.PI);
+  const densityArc = d3
+    .arc()
+    .startAngle(0)
+    .endAngle(2 * Math.PI);
   const colorDensity = d3
     .scaleSequential(d3.interpolateInferno)
     .domain([
@@ -366,27 +386,35 @@ async function init() {
       0,
       1,
     );
-    const globeOpacity = phase === "globe"
-      ? 1
-      : phase === "handoff"
-        ? 1 - d3.easeCubicInOut(Math.min(1, handoffP * 1.05))
-        : 0;
-    const barsOpacity = phase === "globe"
-      ? 1
-      : 1 - d3.easeCubicIn(clamp((zoomP - GLOBE_PHASE_END) / 0.18, 0, 1));
-    const satelliteOpacity = phase === "globe"
-      ? 1
-      : 1 - d3.easeCubicIn(clamp((zoomP - 0.5) / 0.26, 0, 1));
+    const globeOpacity =
+      phase === "globe"
+        ? 1
+        : phase === "handoff"
+          ? 1 - d3.easeCubicInOut(Math.min(1, handoffP * 1.05))
+          : 0;
+    const barsOpacity =
+      phase === "globe"
+        ? 1
+        : 1 - d3.easeCubicIn(clamp((zoomP - GLOBE_PHASE_END) / 0.18, 0, 1));
+    const satelliteOpacity =
+      phase === "globe"
+        ? 1
+        : 1 - d3.easeCubicIn(clamp((zoomP - 0.5) / 0.26, 0, 1));
     const timelineOpacity = 1 - d3.easeCubicIn(clamp(zoomP / 0.58, 0, 1));
     const densityOpacity = d3.easeCubicOut(clamp((zoomP - 0.48) / 0.26, 0, 1));
-    const radialAxisOpacity = d3.easeCubicOut(clamp((zoomP - 0.62) / 0.16, 0, 1));
-    const densityTitleOpacity = d3.easeCubicOut(clamp((zoomP - 0.58) / 0.18, 0, 1));
+    const radialAxisOpacity = d3.easeCubicOut(
+      clamp((zoomP - 0.62) / 0.16, 0, 1),
+    );
+    const densityTitleOpacity = d3.easeCubicOut(
+      clamp((zoomP - 0.58) / 0.18, 0, 1),
+    );
     const orbitTitleOpacity = 1 - d3.easeCubicIn(clamp(zoomP / 0.42, 0, 1));
-    const satelliteDrawRatio = phase === "globe"
-      ? 0.028
-      : phase === "handoff"
-        ? d3.interpolateNumber(0.018, 0.006)(handoffP)
-        : 0.004;
+    const satelliteDrawRatio =
+      phase === "globe"
+        ? 0.028
+        : phase === "handoff"
+          ? d3.interpolateNumber(0.018, 0.006)(handoffP)
+          : 0.004;
 
     return {
       scrollP,
@@ -424,7 +452,10 @@ async function init() {
     earthGlow
       .attr("cy", state.currentCy)
       .attr("r", state.currentR * 1.12)
-      .style("opacity", Math.max(state.globeOpacity * 0.72, state.densityOpacity * 0.22));
+      .style(
+        "opacity",
+        Math.max(state.globeOpacity * 0.72, state.densityOpacity * 0.22),
+      );
     earthCircle.attr("cy", state.currentCy).attr("r", state.currentR);
     globeShade
       .attr("cy", state.currentCy + state.currentR * 0.12)
@@ -445,6 +476,11 @@ async function init() {
     satLayer.style("opacity", state.satelliteOpacity);
     globeLayer.style("opacity", state.globeOpacity);
     launchBarLayer.style("opacity", state.barsOpacity);
+
+    if (state.barsOpacity < 0.08) {
+      hoveredLaunchSiteCode = null;
+      renderLaunchTooltip(null);
+    }
 
     densityLayer
       .style("opacity", state.densityOpacity)
@@ -472,8 +508,40 @@ async function init() {
   function setCursor(isDragging, isHoveringGlobe) {
     svg.style(
       "cursor",
-      isDragging ? "grabbing" : isHoveringGlobe ? "grab" : "default",
+      isDragging
+        ? "grabbing"
+        : hoveredLaunchSiteCode
+          ? "pointer"
+          : isHoveringGlobe
+            ? "grab"
+            : "default",
     );
+  }
+
+  function renderLaunchTooltip(site) {
+    if (!site) {
+      tooltip
+        .style("opacity", "0")
+        .style("transform", "translate(-9999px, -9999px)");
+      return;
+    }
+
+    const bounds = svg.node().getBoundingClientRect();
+    const scaleX = bounds.width / width;
+    const scaleY = bounds.height / height;
+    const isRightSide = site.labelX >= width / 2;
+    const screenX = site.tipX * scaleX + (isRightSide ? 18 : -18);
+    const screenY = site.tipY * scaleY - 10;
+
+    tooltip
+      .style("opacity", "1")
+      .style("transform", `translate(${screenX}px, ${screenY}px)`)
+      .style("transform-origin", isRightSide ? "top left" : "top right")
+      .html(
+        `<div style="font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#ffd166; margin-bottom:4px;">${site.siteCode}</div>` +
+          `<div style="font-size:14px; font-weight:700; color:#ffffff; margin-bottom:4px;">${site.siteName}</div>` +
+          `<div style="color:rgba(226, 238, 255, 0.82);">${site.country}</div>`,
+      );
   }
 
   function autoCenterLon(elapsed) {
@@ -483,10 +551,6 @@ async function init() {
   }
 
   function updateGlobe(elapsed, state) {
-    if (state.phase !== "globe") {
-      return;
-    }
-
     const autoBaseLon = autoCenterLon(elapsed);
     rotationState.lastAutoBaseLon = autoBaseLon;
     const autoLon = wrapDegrees(autoBaseLon + rotationState.autoLonOffset);
@@ -513,10 +577,16 @@ async function init() {
       MAX_MANUAL_LAT,
     );
 
+    const globeCenter = [width / 2, state.currentCy];
+    const visibleCenterGeo = [
+      rotationState.displayLon,
+      rotationState.displayLat,
+    ];
     const rotation = [-rotationState.displayLon, -rotationState.displayLat, 0];
 
     globeProjection
-      .translate([width / 2, state.currentCy])
+      .clipAngle(90)
+      .translate(globeCenter)
       .scale(state.currentR)
       .rotate(rotation);
 
@@ -524,10 +594,7 @@ async function init() {
     globeLand.attr("d", globePath(land));
 
     const visibleContinentLabels = CONTINENT_LABELS.map((label) => {
-      const angularDistance = d3.geoDistance(label.lonLat, [
-        rotationState.displayLon,
-        rotationState.displayLat,
-      ]);
+      const angularDistance = d3.geoDistance(label.lonLat, visibleCenterGeo);
       if (angularDistance >= Math.PI / 2 - 0.08) return null;
 
       const projected = globeProjection(label.lonLat);
@@ -574,25 +641,16 @@ async function init() {
             0,
             MAX_GLOBE_SITES,
           );
-    const yearMaxCount =
-      resolvedYear < LAUNCH_START_YEAR
-        ? 0
-        : maxSiteCountByYear.get(clampedYear) || 0;
-    const stabilizedMaxCount = Math.max(
-      yearMaxCount,
-      globalLaunchSiteMaxCount * BAR_SCALE_STABILITY,
-      1,
-    );
-    const yearBarLengthScale = d3
-      .scaleLinear()
-      .domain([0, stabilizedMaxCount])
-      .range([0.18, 1])
+    const maxBarHeight = state.currentR * BAR_HEIGHT_MAX_RATIO;
+    const barHeightScale = d3
+      .scaleSqrt()
+      .domain([BAR_MIN_VISIBLE_COUNT, Math.max(BAR_MIN_VISIBLE_COUNT + 1, globalLaunchSiteMaxCount)])
+      .range([0, maxBarHeight])
       .clamp(true);
 
     const visibleBars = activeLaunchSites
       .map((d) => {
-        const centerGeo = [rotationState.displayLon, rotationState.displayLat];
-        const angularDistance = d3.geoDistance(d.lonLat, centerGeo);
+        const angularDistance = d3.geoDistance(d.lonLat, visibleCenterGeo);
         if (angularDistance >= Math.PI / 2 - 0.03) return null;
 
         const projected = globeProjection(d.lonLat);
@@ -600,12 +658,13 @@ async function init() {
 
         const baseX = projected[0];
         const baseY = projected[1];
-        const radialDx = baseX - width / 2;
-        const radialDy = baseY - state.currentCy;
+        const radialDx = baseX - globeCenter[0];
+        const radialDy = baseY - globeCenter[1];
         const radialLength = Math.hypot(radialDx, radialDy) || 1;
         const ux = radialDx / radialLength;
         const uy = radialDy / radialLength;
-        const barLength = yearBarLengthScale(d.count) * state.currentR * 0.34;
+        const barLength =
+          d.count < BAR_MIN_VISIBLE_COUNT ? 0 : barHeightScale(d.count);
         const tipX = baseX + ux * barLength;
         const tipY = baseY + uy * barLength;
         const widthPx = Math.max(2.5, state.currentR * 0.018);
@@ -624,6 +683,7 @@ async function init() {
           labelX: tipX + ux * labelOffset,
           labelY: tipY + uy * labelOffset,
           labelFontSize: Math.max(9, Math.min(14, 9 + barLength * 0.06)),
+          showLabel: d.count >= BAR_LABEL_MIN_COUNT,
           isNewlyActive: d.firstActiveYear === resolvedYear,
         };
       })
@@ -646,7 +706,17 @@ async function init() {
         (update) => update,
         (exit) => exit.remove(),
       )
-      .style("opacity", 1);
+      .style("opacity", 1)
+      .on("pointerenter", (_, d) => {
+        hoveredLaunchSiteCode = d.site;
+        renderLaunchTooltip(d);
+        setCursor(false, true);
+      })
+      .on("pointerleave", () => {
+        hoveredLaunchSiteCode = null;
+        renderLaunchTooltip(null);
+        setCursor(false, false);
+      });
 
     bars
       .select("path.bar-side")
@@ -701,7 +771,20 @@ async function init() {
       .attr("stroke", "rgba(5, 7, 10, 0.72)")
       .attr("stroke-width", 1.5)
       .attr("paint-order", "stroke")
-      .text((d) => d.count.toLocaleString());
+      .style("display", (d) => (d.showLabel ? null : "none"))
+      .text((d) => (d.showLabel ? d.count.toLocaleString() : ""));
+
+    if (hoveredLaunchSiteCode) {
+      const hoveredSite = visibleBars.find(
+        (d) => d.site === hoveredLaunchSiteCode,
+      );
+      if (hoveredSite && state.barsOpacity > 0.08) {
+        renderLaunchTooltip(hoveredSite);
+      } else {
+        hoveredLaunchSiteCode = null;
+        renderLaunchTooltip(null);
+      }
+    }
   }
 
   svg.on("pointermove", (event) => {
@@ -765,6 +848,8 @@ async function init() {
   svg.on("pointercancel", endDrag);
   svg.on("pointerleave", () => {
     if (rotationState.dragging) return;
+    hoveredLaunchSiteCode = null;
+    renderLaunchTooltip(null);
     setCursor(false, false);
   });
 
@@ -778,7 +863,8 @@ async function init() {
     const now = performance.now();
     const dt = now - lastFrameAt;
     lastFrameAt = now;
-    const lerp = 1 - Math.pow(1 - DISPLAY_SCROLL_EASING, Math.max(1, dt / 16.67));
+    const lerp =
+      1 - Math.pow(1 - DISPLAY_SCROLL_EASING, Math.max(1, dt / 16.67));
     displayScrollP += (targetScrollP - displayScrollP) * lerp;
 
     const t = elapsed / 1000;
@@ -808,7 +894,10 @@ async function init() {
 
     labelTextB
       .style("opacity", state.densityTitleOpacity)
-      .attr("transform", `translate(0, ${d3.interpolateNumber(20, 0)(state.densityTitleOpacity)})`);
+      .attr(
+        "transform",
+        `translate(0, ${d3.interpolateNumber(20, 0)(state.densityTitleOpacity)})`,
+      );
 
     updateGlobe(elapsed, state);
 
@@ -819,7 +908,9 @@ async function init() {
             lastVisibleSatellites.length,
             Math.max(
               8,
-              Math.floor(lastVisibleSatellites.length * state.satelliteDrawRatio),
+              Math.floor(
+                lastVisibleSatellites.length * state.satelliteDrawRatio,
+              ),
             ),
           );
     const drawnSats = sampleEvenly(lastVisibleSatellites, drawCount);
@@ -855,7 +946,6 @@ async function init() {
       );
   });
 }
-
 
 function buildBarFaces(baseX, baseY, tipX, tipY, widthPx, depthPx) {
   const dx = tipX - baseX;
@@ -916,7 +1006,6 @@ function sampleEvenly(items, count) {
   }
   return sampled;
 }
-
 
 function mulberry32(a) {
   return function () {

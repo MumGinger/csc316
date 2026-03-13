@@ -44,6 +44,66 @@ export const LAUNCH_SITE_COORDS = {
   UNK: [0, 0],
 };
 
+export const LAUNCH_SITE_METADATA = {
+  AFETR: { name: "Air Force Eastern Test Range", country: "United States" },
+  AFWTR: { name: "Air Force Western Test Range", country: "United States" },
+  ALCLC: { name: "Alcantara Launch Center", country: "Brazil" },
+  ANDSP: { name: "Andoya Spaceport", country: "Norway" },
+  BOS: { name: "Bowen Orbital Spaceport", country: "Australia" },
+  CAS: { name: "Canaries Airspace", country: "Spain" },
+  DLS: { name: "Dombarovskiy Launch Site", country: "Russia" },
+  ERAS: { name: "Eastern Range Airspace", country: "United States" },
+  FRGUI: { name: "Europe's Spaceport, Kourou", country: "French Guiana" },
+  HGSTR: { name: "Hammaguira Space Track Range", country: "Algeria" },
+  JJSLA: { name: "Jeju Island Sea Launch Area", country: "South Korea" },
+  JSC: { name: "Jiuquan Space Center", country: "China" },
+  KODAK: { name: "Kodiak Launch Complex", country: "United States" },
+  KSCUT: { name: "Uchinoura Space Center", country: "Japan" },
+  KWAJ: { name: "US Army Kwajalein Atoll", country: "Marshall Islands" },
+  KYMSC: {
+    name: "Kapustin Yar Missile and Space Complex",
+    country: "Russia",
+  },
+  NSC: { name: "Naro Space Complex", country: "South Korea" },
+  PLMSC: {
+    name: "Plesetsk Missile and Space Complex",
+    country: "Russia",
+  },
+  RLLB: {
+    name: "Rocket Lab Launch Base, Mahia Peninsula",
+    country: "New Zealand",
+  },
+  SCSLA: { name: "South China Sea Launch Area", country: "China" },
+  SEAL: { name: "Sea Launch Platform", country: "Mobile Platform" },
+  SEMLS: { name: "Semnan Satellite Launch Site", country: "Iran" },
+  SMTS: { name: "Shahrud Missile Test Site", country: "Iran" },
+  SNMLP: { name: "San Marco Launch Platform", country: "Kenya" },
+  SPKII: { name: "Space Port Kii", country: "Japan" },
+  SRILR: { name: "Satish Dhawan Space Centre", country: "India" },
+  SUBL: { name: "Submarine Launch Platform", country: "Mobile Platform" },
+  SVOBO: { name: "Svobodnyy Launch Complex", country: "Russia" },
+  TAISC: { name: "Taiyuan Space Center", country: "China" },
+  TANSC: { name: "Tanegashima Space Center", country: "Japan" },
+  TBD: { name: "To Be Determined", country: "Unknown" },
+  TYMSC: {
+    name: "Tyuratam Missile and Space Center (Baikonur Cosmodrome)",
+    country: "Kazakhstan",
+  },
+  UNK: { name: "Unknown", country: "Unknown" },
+  VOSTO: { name: "Vostochny Cosmodrome", country: "Russia" },
+  WLPIS: { name: "Wallops Island", country: "United States" },
+  WOMRA: { name: "Woomera", country: "Australia" },
+  WRAS: { name: "Western Range Airspace", country: "United States" },
+  WSC: { name: "Wenchang Satellite Launch Site", country: "China" },
+  XICLF: { name: "Xichang Launch Facility", country: "China" },
+  YAVNE: { name: "Yavne Launch Facility", country: "Israel" },
+  YSLA: { name: "Yellow Sea Launch Area", country: "China" },
+  YUN: {
+    name: "Yunsong Launch Site (Sohae Satellite Launching Station)",
+    country: "North Korea",
+  },
+};
+
 export const VALID_CONTINENTS = [
   "Asia",
   "Europe",
@@ -75,6 +135,17 @@ export function normalizeSiteCode(value) {
   return String(value ?? "")
     .trim()
     .toUpperCase();
+}
+
+export function getLaunchSiteMetadata(siteCode) {
+  const normalizedSiteCode = normalizeSiteCode(siteCode);
+  const metadata = LAUNCH_SITE_METADATA[normalizedSiteCode];
+
+  return {
+    siteCode: normalizedSiteCode,
+    siteName: metadata?.name || normalizedSiteCode || "Unknown",
+    country: metadata?.country || "Unknown",
+  };
 }
 
 export function parseLaunchYear(row) {
@@ -124,6 +195,7 @@ export function buildRankedLaunchSites(
 
       return {
         ...d,
+        ...getLaunchSiteMetadata(d.site),
         lon: lonLat[0],
         lat: lonLat[1],
         lonLat,
@@ -158,6 +230,7 @@ export function buildCumulativeLaunchSiteCounts(
 
     siteMeta.set(site, {
       site,
+      ...getLaunchSiteMetadata(site),
       lon: lonLat[0],
       lat: lonLat[1],
       lonLat,
