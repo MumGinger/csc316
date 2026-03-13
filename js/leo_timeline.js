@@ -25,25 +25,23 @@ const sticky = mount
 
 const tooltip = sticky
   .append("div")
-  .attr("class", "launch-site-tooltip")
+  .attr("class", "vis-tooltip")
   .style("position", "absolute")
   .style("left", "0")
   .style("top", "0")
   .style("transform", "translate(-9999px, -9999px)")
   .style("pointer-events", "none")
-  .style("z-index", "5")
-  .style("min-width", "180px")
-  .style("max-width", "260px")
+  .style("z-index", "20")
+  .style("min-width", "160px")
   .style("padding", "10px 12px")
   .style("border", "1px solid rgba(255, 209, 102, 0.35)")
   .style("border-radius", "10px")
-  .style("background", "rgba(4, 10, 22, 0.92)")
-  .style("box-shadow", "0 12px 28px rgba(0, 0, 0, 0.35)")
+  .style("background", "rgba(4, 10, 22, 0.95)")
   .style("color", "#f8fbff")
   .style("font-family", "system-ui, sans-serif")
   .style("font-size", "12px")
-  .style("line-height", "1.35")
-  .style("opacity", "0");
+  .style("opacity", "0")
+  .style("transition", "opacity 0.2s");
 
 const width = 900;
 const height = 900;
@@ -76,7 +74,9 @@ const BAR_LABEL_MIN_COUNT = 100;
 const GLOBE_PHASE_END = 0.45;
 const DENSITY_PHASE_START = 0.75;
 const DISPLAY_SCROLL_EASING = 0.14;
-const DENSITY_RING_COUNT = 96;
+const DENSITY_RING_COUNT = 350;
+const POPUP_WINDOW_P = 0.05;
+
 
 const defs = svg.append("defs");
 defs
@@ -101,7 +101,7 @@ defs
 const densityLayer = svg.append("g").style("opacity", 0);
 const globalAxisLayer = svg.append("g").style("opacity", 0);
 const earthLayer = svg.append("g");
-const satLayer = svg.append("g");
+const satLayer = svg.append("g").style("pointer-events", "all");
 const uiLayer = svg.append("g");
 const timelineG = uiLayer.append("g").attr("class", "timeline-ui");
 
@@ -154,30 +154,35 @@ const rScaleGlobal = d3
 const events = [
   {
     year: 1957,
+    targetP: 0.10,
     label: "Sputnik 1",
     annotation:
       "Oct 4, 1957: The Soviet Union launched Sputnik 1, the world's first artificial satellite. The 58 cm aluminum sphere orbited Earth every 96 minutes, transmitting a radio beep heard worldwide — marking the dawn of the Space Age.",
   },
   {
     year: 1962,
+    targetP: 0.22,
     label: "Telstar",
     annotation:
       "Jul 10, 1962: AT&T's Telstar 1 became the first active communications satellite, relaying the first live transatlantic TV pictures and telephone calls — transforming global communications and inspiring a worldwide hit song.",
   },
   {
     year: 1990,
+    targetP: 0.35,
     label: "Hubble",
     annotation:
       "Apr 24, 1990: Deployed by Space Shuttle Discovery, the Hubble Space Telescope revolutionized astronomy. After a 1993 corrective servicing mission it captured imagery spanning billions of light-years, reshaping our understanding of the universe.",
   },
   {
     year: 1998,
+    targetP: 0.48,
     label: "ISS",
     annotation:
       "Nov 20, 1998: Russia launched Zarya, the first ISS module. A joint project of 15 nations, the International Space Station has been continuously inhabited since Nov 2000 — the largest human-made structure ever placed in orbit.",
   },
   {
     year: 2019,
+    targetP: 0.60,
     label: "Starlink",
     annotation:
       "May 23, 2019: SpaceX launched its first 60 Starlink satellites, beginning the largest constellation in history. By 2025, over 6,000 Starlink satellites orbit Earth, providing global broadband and dramatically reshaping the orbital environment.",
@@ -392,18 +397,53 @@ async function init() {
     .tickFormat((d) => (d === 0 ? "" : `${d}km`));
   globalAxisLayer.append("g").call(globalAxis).style("color", "#ff9a76");
 
-  // Friction-point popup annotation overlay
-  const POPUP_WINDOW_YEARS = 2.5;
   const popupDiv = sticky.append("div").attr("class", "leo-popup");
   const popupTitle = popupDiv.append("div").attr("class", "leo-popup__title");
   const popupBody = popupDiv.append("div").attr("class", "leo-popup__body");
 
-  function readSceneState() {
+  function readScrollProgress() {
     const rect = mount.node().getBoundingClientRect();
     return Math.min(
       1,
       Math.max(0, -rect.top / (rect.height - window.innerHeight)),
     );
+  }
+
+  function updateTooltip(data, event) {
+    if (!data) {
+      tooltip.style("opacity", "0").style("transform", "translate(-9999px, -9999px)");
+      return;
+    }
+    const [mX, mY] = d3.pointer(event, sticky.node());
+    const isRightSide = mX >= width / 2;
+
+    const x = mX + (isRightSide ? -180 : 20);
+    const y = mY - 40;
+
+    let htmlContent = "";
+
+    if (data.siteCode) {
+      htmlContent = `
+      <div style="font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#ffd166; margin-bottom:4px;">${data.siteCode}</div>
+      <div style="font-size:14px; font-weight:700; color:#ffffff; margin-bottom:4px;">${data.siteName}</div>
+      <div style="color:rgba(226, 238, 255, 0.82);">${data.country}</div>
+      <div style="margin-top:6px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.1); color:#6bff66;">
+        Total Launches: ${data.count.toLocaleString()}
+      </div>
+    `;
+    } else {
+      htmlContent = `
+      <div style="font-size:11px; color:#ffd166; margin-bottom:4px;">NORAD ID: ${data.id}</div>
+      <div style="font-size:14px; font-weight:700; color:#ffffff; margin-bottom:4px;">Payload</div>
+      <div style="color:rgba(226, 238, 255, 0.82);">Alt: ${Math.round(data.altitude)} km</div>
+      <div style="color:rgba(226, 238, 255, 0.82);">Launched: ${data.launchYear}</div>
+    `;
+    }
+
+    tooltip
+      .style("opacity", "1")
+      .style("transform", `translate(${x}px, ${y}px)`)
+      .html(htmlContent);
   }
 
   function buildSceneState(scrollP) {
@@ -510,7 +550,7 @@ async function init() {
 
     if (state.barsOpacity < 0.08) {
       hoveredLaunchSiteCode = null;
-      renderLaunchTooltip(null);
+      updateTooltip(null);
     }
 
     densityLayer
@@ -549,32 +589,6 @@ async function init() {
     );
   }
 
-  function renderLaunchTooltip(site) {
-    if (!site) {
-      tooltip
-        .style("opacity", "0")
-        .style("transform", "translate(-9999px, -9999px)");
-      return;
-    }
-
-    const bounds = svg.node().getBoundingClientRect();
-    const scaleX = bounds.width / width;
-    const scaleY = bounds.height / height;
-    const isRightSide = site.labelX >= width / 2;
-    const screenX = site.tipX * scaleX + (isRightSide ? 18 : -18);
-    const screenY = site.tipY * scaleY - 10;
-
-    tooltip
-      .style("opacity", "1")
-      .style("transform", `translate(${screenX}px, ${screenY}px)`)
-      .style("transform-origin", isRightSide ? "top left" : "top right")
-      .html(
-        `<div style="font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#ffd166; margin-bottom:4px;">${site.siteCode}</div>` +
-          `<div style="font-size:14px; font-weight:700; color:#ffffff; margin-bottom:4px;">${site.siteName}</div>` +
-          `<div style="color:rgba(226, 238, 255, 0.82);">${site.country}</div>`,
-      );
-  }
-
   function autoCenterLon(elapsed) {
     return wrapDegrees(
       DEFAULT_GLOBE_LON_OFFSET + (elapsed / 1000) * AUTO_ROTATION_SPEED,
@@ -598,12 +612,12 @@ async function init() {
 
     rotationState.displayLon = wrapDegrees(
       rotationState.displayLon +
-        shortestAngleDelta(rotationState.displayLon, rotationState.manualLon) *
-          ROTATION_LERP,
+      shortestAngleDelta(rotationState.displayLon, rotationState.manualLon) *
+      ROTATION_LERP,
     );
     rotationState.displayLat = clamp(
       rotationState.displayLat +
-        (rotationState.manualLat - rotationState.displayLat) * ROTATION_LERP,
+      (rotationState.manualLat - rotationState.displayLat) * ROTATION_LERP,
       -MAX_MANUAL_LAT,
       MAX_MANUAL_LAT,
     );
@@ -669,9 +683,9 @@ async function init() {
       resolvedYear < LAUNCH_START_YEAR
         ? []
         : (cumulativeSiteCountsByYear.get(clampedYear) || []).slice(
-            0,
-            MAX_GLOBE_SITES,
-          );
+          0,
+          MAX_GLOBE_SITES,
+        );
     const maxBarHeight = state.currentR * BAR_HEIGHT_MAX_RATIO;
     const barHeightScale = d3
       .scaleSqrt()
@@ -740,12 +754,11 @@ async function init() {
       .style("opacity", 1)
       .on("pointerenter", (_, d) => {
         hoveredLaunchSiteCode = d.site;
-        renderLaunchTooltip(d);
+        updateTooltip(d, event);
         setCursor(false, true);
       })
       .on("pointerleave", () => {
         hoveredLaunchSiteCode = null;
-        renderLaunchTooltip(null);
         setCursor(false, false);
       });
 
@@ -804,18 +817,6 @@ async function init() {
       .attr("paint-order", "stroke")
       .style("display", (d) => (d.showLabel ? null : "none"))
       .text((d) => (d.showLabel ? d.count.toLocaleString() : ""));
-
-    if (hoveredLaunchSiteCode) {
-      const hoveredSite = visibleBars.find(
-        (d) => d.site === hoveredLaunchSiteCode,
-      );
-      if (hoveredSite && state.barsOpacity > 0.08) {
-        renderLaunchTooltip(hoveredSite);
-      } else {
-        hoveredLaunchSiteCode = null;
-        renderLaunchTooltip(null);
-      }
-    }
   }
 
   svg.on("pointermove", (event) => {
@@ -880,7 +881,7 @@ async function init() {
   svg.on("pointerleave", () => {
     if (rotationState.dragging) return;
     hoveredLaunchSiteCode = null;
-    renderLaunchTooltip(null);
+    updateTooltip(null);
     setCursor(false, false);
   });
 
@@ -903,8 +904,8 @@ async function init() {
     applySceneState(state);
 
     const resolvedYear = Math.floor(state.currentYear);
+    const targetCount = Math.floor(satelliteCountScale(state.currentYear));
     if (resolvedYear !== lastVisibleSatelliteYear) {
-      const targetCount = Math.floor(satelliteCountScale(state.currentYear));
       lastVisibleSatellites = processedData
         .filter(
           (d) =>
@@ -932,28 +933,28 @@ async function init() {
 
     updateGlobe(elapsed, state);
 
-    // Update friction-point popup
     let activePopupEvent = null;
-    let minPopupDist = Infinity;
+    let minPDiff = Infinity;
+
     for (const ev of events) {
-      const dist = Math.abs(state.currentYear - ev.year);
-      if (dist < minPopupDist) {
-        minPopupDist = dist;
+      const diff = Math.abs(state.scrollP - ev.targetP);
+      if (diff < minPDiff) {
+        minPDiff = diff;
         activePopupEvent = ev;
       }
     }
-    const popupOpacity =
-      minPopupDist < POPUP_WINDOW_YEARS
-        ? Math.max(0, 1 - minPopupDist / POPUP_WINDOW_YEARS) *
-          Math.max(0, 1 - state.zoomP * 2)
-        : 0;
-    if (minPopupDist < POPUP_WINDOW_YEARS) {
+    const popupOpacity = minPDiff < POPUP_WINDOW_P
+      ? (1 - minPDiff / POPUP_WINDOW_P)
+      : 0;
+
+    if (activePopupEvent) {
       popupTitle.text(activePopupEvent.label);
       popupBody.text(activePopupEvent.annotation);
+      popupDiv.style("opacity", popupOpacity);
     }
     popupDiv.style("opacity", popupOpacity);
 
-    const drawnSats = activeSats.slice(0, Math.max(targetCount / 40, 1));
+    const drawnSats = lastVisibleSatellites.slice(0, Math.max(targetCount / 40, 1));
     const circles = satLayer.selectAll("circle").data(drawnSats, (d) => d.id);
 
     circles
@@ -963,6 +964,9 @@ async function init() {
             .append("circle")
             .attr("r", 1.2)
             .attr("fill", "#ffd166")
+            .style("stroke", "transparent")
+            .style("stroke-width", "12px")
+            .style("cursor", "pointer")
             .style("opacity", 0)
             .call((enter) =>
               enter.transition().duration(300).style("opacity", 0.8),
@@ -975,15 +979,30 @@ async function init() {
         (d) =>
           width / 2 +
           Math.cos(d.baseAngle + t * d.drift) *
-            (state.currentR + d.relativeAlt),
+          (state.currentR + d.relativeAlt),
       )
       .attr(
         "cy",
         (d) =>
           state.currentCy +
           Math.sin(d.baseAngle + t * d.drift) *
-            (state.currentR + d.relativeAlt),
-      );
+          (state.currentR + d.relativeAlt),
+      ).on("pointerenter", (event, d) => {
+        d3.select(event.currentTarget)
+          .transition().duration(100)
+          .attr("r", 5)
+          .attr("fill", "#fff");
+
+        updateTooltip(d, event);
+      })
+      .on("pointerleave", (event) => {
+        d3.select(event.currentTarget)
+          .transition().duration(100)
+          .attr("r", 1.2)
+          .attr("fill", "#ffd166");
+
+        updateTooltip(null);
+      });
   });
 }
 

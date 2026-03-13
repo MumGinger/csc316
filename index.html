@@ -18,10 +18,38 @@
             </p>
         </div>
         </div>
+        <div class="titlecard">
+        <div class="group-holder">
+            <img src="img/bgr2.jpg"></img>
+            <p class="title">
+                Ever since the launch of Sputnik in 1952, the world has been fundamentally altered by the presence of satellites, orbiting earth at speeds greater than 30km per second. 
+                Satellites help to do everything from navigation via GPS, telecommunications in remote places, to performing earth science, such as analyzing emissions or crop yields for a healthier planet, or even 
+                helping to explore the cosmos, with missions like Hubble or the James Webb Space Telescope.
+            </p>
+        </div>
+        </div>
+
+        <div class="titlecard">
+        <div class="group-holder">
+            <p class="title">
+            As satellites become more and more a part of our daily lives, we ask what does  
+            </p>
+            <img src="img/bgr2.jpg"></img>
+        </div>
+        </div>
+
+        <div class="titlecard">
+        <div class="group-holder">
+            <div id="demo" class="plot" style="min-height: 400px;"></div>
+            <p class="title">
+            As satellites become more and more important, 
+            </p>
+            <script type="module" src="js/demo.js"></script>
+        </div>
+        </div>
             <div id="leo-timeline" class="center"></div>
             <script type="module" src="js/leo_timeline.js"></script>
-        <main>
-        <!-- HOOK -->
+
         <section id="hook">
             <p>
                 Over time, satellites are retiring less often. Longer lifespans and delayed disposal mean objects
@@ -36,8 +64,6 @@
                 objects to graveyard orbits.
             </p>
         </section>
-        <i>*MOVE THESE TO AN ANNOTATION ON THE DENSITY PLOT*</i>
-
 
         <section id="insight-1">
             <h2>In fact, most objects in orbit are <b>not</b> active satellites.</h2>
@@ -56,12 +82,10 @@
                 all manoeuvres were to stop, how long would it take until a potential collision occurs between tracked
                 artificial objects, including satellites, debris, and abandoned rocket bodies?
             </p>
-            <!-- crash visualization -->
-            <div id="crash-viz" class="center" style="width:180px; margin: 12px auto 0 auto;"></div>
-            <script type="module" src="js/crash.js"></script>
         </section>
+        <div id="crash-viz" class="plot"></div>
+        <script type="module" src="js/crash.js"></script>
 
-        <!-- SUPPORTING CONTEXT -->
         <section id="supporting">
             <h2>Who's Responsible?</h2>
             <p>
@@ -75,12 +99,15 @@
                 <option value="manufacturer" selected>Manufacturer</option>
                 <option value="owner">Country</option>
             </select>
-            <div id="manufacturer" class="center"></div>
-            <div id="manufacturer-timeline" class="center" style="height:80px; max-width:960px; margin-top:8px;"></div>
-            <script type="module" src="js/manufacturer.js"></script>
 
             <script type="module" src="js/main.js"></script>
         </section>
+        <div class="plot">
+            <div id="manufacturer" class="center"></div>
+            <div id="manufacturer-timeline" style="height:80px; max-width:960px; margin-top:8px; margin: auto;"></div>
+            <script type="module" src="js/manufacturer.js"></script>
+
+        </div>
 
         <section id="resolution">
             <h2>What to Do?</h2>
@@ -89,7 +116,6 @@
                 + dependence on LEO makes space pollution the central issue to address.
             </p>
         </section>
-    </main>
 
     <footer>
         <p>

@@ -1,5 +1,3 @@
-/* csc316/css/style.css */
-
 #launchmap {
   width: 100%;
   height: 600px;
@@ -55,6 +53,15 @@
 
 .title h1 {
   font-size: 50pt;
+}
+
+section {
+  max-width: 40em;
+  margin: auto;
+}
+
+.plot {
+  margin: auto;
 }
 
 /* The World: Tilted back to lie on the desk */
