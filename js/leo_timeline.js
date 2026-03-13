@@ -73,9 +73,7 @@ const MAX_GLOBE_SITES = 18;
 const BAR_SCALE_STABILITY = 0.35;
 const GLOBE_PHASE_END = 0.45;
 const DENSITY_PHASE_START = 0.75;
-const HANDOFF_GLOBE_FREEZE = 0.62;
 const DISPLAY_SCROLL_EASING = 0.14;
-const HANDOFF_GLOBE_GEOMETRY_INTERVAL = 90;
 const DENSITY_RING_COUNT = 96;
 
 const defs = svg.append("defs");
@@ -240,16 +238,11 @@ async function init() {
   };
 
   let latestSceneState = null;
-  const activeLeoByYear = new Map();
   let targetScrollP = readScrollProgress();
   let displayScrollP = targetScrollP;
   let lastFrameAt = performance.now();
   let lastVisibleSatelliteYear = null;
   let lastVisibleSatellites = [];
-  let lastLaunchBarKey = null;
-  let projectedGlobeState = null;
-  let lastProjectedRotation = null;
-  let lastGlobeGeometryAt = -Infinity;
   let hoveredLaunchSiteCode = null;
 
   timelineG
@@ -543,10 +536,6 @@ async function init() {
   }
 
   function updateGlobe(elapsed, state) {
-    if (state.phase !== "globe") {
-      return;
-    }
-
     const autoBaseLon = autoCenterLon(elapsed);
     rotationState.lastAutoBaseLon = autoBaseLon;
     const autoLon = wrapDegrees(autoBaseLon + rotationState.autoLonOffset);
@@ -573,10 +562,13 @@ async function init() {
       MAX_MANUAL_LAT,
     );
 
+    const globeCenter = [width / 2, state.currentCy];
+    const visibleCenterGeo = [rotationState.displayLon, rotationState.displayLat];
     const rotation = [-rotationState.displayLon, -rotationState.displayLat, 0];
 
     globeProjection
-      .translate([width / 2, state.currentCy])
+      .clipAngle(90)
+      .translate(globeCenter)
       .scale(state.currentR)
       .rotate(rotation);
 
@@ -584,10 +576,7 @@ async function init() {
     globeLand.attr("d", globePath(land));
 
     const visibleContinentLabels = CONTINENT_LABELS.map((label) => {
-      const angularDistance = d3.geoDistance(label.lonLat, [
-        rotationState.displayLon,
-        rotationState.displayLat,
-      ]);
+      const angularDistance = d3.geoDistance(label.lonLat, visibleCenterGeo);
       if (angularDistance >= Math.PI / 2 - 0.08) return null;
 
       const projected = globeProjection(label.lonLat);
@@ -651,8 +640,7 @@ async function init() {
 
     const visibleBars = activeLaunchSites
       .map((d) => {
-        const centerGeo = [rotationState.displayLon, rotationState.displayLat];
-        const angularDistance = d3.geoDistance(d.lonLat, centerGeo);
+        const angularDistance = d3.geoDistance(d.lonLat, visibleCenterGeo);
         if (angularDistance >= Math.PI / 2 - 0.03) return null;
 
         const projected = globeProjection(d.lonLat);
@@ -660,8 +648,8 @@ async function init() {
 
         const baseX = projected[0];
         const baseY = projected[1];
-        const radialDx = baseX - width / 2;
-        const radialDy = baseY - state.currentCy;
+        const radialDx = baseX - globeCenter[0];
+        const radialDy = baseY - globeCenter[1];
         const radialLength = Math.hypot(radialDx, radialDy) || 1;
         const ux = radialDx / radialLength;
         const uy = radialDy / radialLength;
