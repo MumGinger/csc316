@@ -25,25 +25,23 @@ const sticky = mount
 
 const tooltip = sticky
   .append("div")
-  .attr("class", "launch-site-tooltip")
+  .attr("class", "vis-tooltip")
   .style("position", "absolute")
   .style("left", "0")
   .style("top", "0")
   .style("transform", "translate(-9999px, -9999px)")
   .style("pointer-events", "none")
-  .style("z-index", "5")
-  .style("min-width", "180px")
-  .style("max-width", "260px")
+  .style("z-index", "20")
+  .style("min-width", "160px")
   .style("padding", "10px 12px")
   .style("border", "1px solid rgba(255, 209, 102, 0.35)")
   .style("border-radius", "10px")
-  .style("background", "rgba(4, 10, 22, 0.92)")
-  .style("box-shadow", "0 12px 28px rgba(0, 0, 0, 0.35)")
+  .style("background", "rgba(4, 10, 22, 0.95)")
   .style("color", "#f8fbff")
   .style("font-family", "system-ui, sans-serif")
   .style("font-size", "12px")
-  .style("line-height", "1.35")
-  .style("opacity", "0");
+  .style("opacity", "0")
+  .style("transition", "opacity 0.2s");
 
 const rankingToggle = sticky
   .append("button")
@@ -126,6 +124,7 @@ const RANKING_PANEL_VALUE_X = 220;
 const RANKING_ROW_HEIGHT = 24;
 const RANKING_BAR_HEIGHT = 12;
 const CONTENT_PADDING_X = 36;
+
 const titleOverlay = sticky
   .append("div")
   .attr("class", "payload-title-overlay")
@@ -144,6 +143,7 @@ const titleOverlay = sticky
   .style("opacity", "0")
   .style("transform", "translate(0, 0)")
   .text("Payloads in orbit 1957-2025");
+
 const svg = sticky
   .append("svg")
   .attr("viewBox", `0 0 ${width} ${height}`)
@@ -173,8 +173,9 @@ const BAR_LABEL_MIN_COUNT = 100;
 const GLOBE_PHASE_END = 0.45;
 const DENSITY_PHASE_START = 0.75;
 const DISPLAY_SCROLL_EASING = 0.14;
-const DENSITY_RING_COUNT = 96;
+const DENSITY_RING_COUNT = 350;
 const DENSITY_OUTER_RADIUS = 372;
+const POPUP_WINDOW_P = 0.15;
 
 const defs = svg.append("defs");
 defs
@@ -199,7 +200,7 @@ defs
 const densityLayer = svg.append("g").style("opacity", 0);
 const globalAxisLayer = svg.append("g").style("opacity", 0);
 const earthLayer = svg.append("g");
-const satLayer = svg.append("g");
+const satLayer = svg.append("g").style("pointer-events", "all");
 const uiLayer = svg.append("g");
 const timelineG = uiLayer.append("g").attr("class", "timeline-ui");
 
@@ -242,6 +243,7 @@ const continentLabelLayer = globeLayer
   .append("g")
   .attr("class", "continent-labels");
 const launchBarLayer = globeLayer.append("g").attr("class", "launch-bars");
+
 const rankingCard = sticky
   .append("div")
   .attr("class", "ranking-panel-card")
@@ -270,11 +272,51 @@ const rScaleGlobal = d3
   .range([dEarthR, DENSITY_OUTER_RADIUS]);
 
 const events = [
-  { year: 1957, label: "Sputnik 1" },
-  { year: 1962, label: "Telstar" },
-  { year: 1990, label: "Hubble" },
-  { year: 1998, label: "ISS" },
-  { year: 2019, label: "Starlink" },
+  {
+    year: 1957,
+    targetP: 0.10,
+    label: "Sputnik 1",
+    annotation:
+      "Oct 4, 1957: The Soviet Union launched Sputnik 1, the world's first artificial satellite. The 58 cm aluminum sphere orbited Earth every 96 minutes, transmitting a radio beep heard worldwide — marking the dawn of the Space Age.",
+  },
+  {
+    year: 1962,
+    targetP: 0.22,
+    label: "Telstar",
+    annotation:
+      "Jul 10, 1962: AT&T's Telstar 1 became the first active communications satellite, relaying the first live transatlantic TV pictures and telephone calls — transforming global communications and inspiring a worldwide hit song.",
+  },
+  {
+    year: 1990,
+    targetP: 0.35,
+    label: "Hubble",
+    annotation:
+      "Apr 24, 1990: Deployed by Space Shuttle Discovery, the Hubble Space Telescope revolutionized astronomy. After a 1993 corrective servicing mission it captured imagery spanning billions of light-years, reshaping our understanding of the universe.",
+  },
+  {
+    year: 1998,
+    targetP: 0.48,
+    label: "ISS",
+    annotation:
+      "Nov 20, 1998: Russia launched Zarya, the first ISS module. A joint project of 15 nations, the International Space Station has been continuously inhabited since Nov 2000 — the largest human-made structure ever placed in orbit.",
+  },
+  {
+    targetP: 0.55,
+    annotation:
+      "Over time, satellites are retiring less often. Longer lifespans and delayed disposal mean objects linger in LEO, keeping the region crowded.",
+  },
+  {
+    year: 2019,
+    targetP: 0.66,
+    label: "Starlink",
+    annotation:
+      "May 23, 2019: SpaceX launched its first 60 Starlink satellites, beginning the largest constellation in history. By 2025, over 6,000 Starlink satellites orbit Earth, providing global broadband and dramatically reshaping the orbital environment.",
+  },
+  {
+    targetP: 1,
+    annotation:
+      "85–90% of cataloged objects are in Low Earth Orbit (LEO). This is where critical infrastructure lives: the ISS, Starlink, Earth imaging, and science missions. High utilization means higher collision risk, and unlike GEO, there is no strong incentive to move objects to graveyard orbits.",
+  },
 ];
 
 const globeProjection = d3.geoOrthographic().precision(0.4).clipAngle(90);
@@ -332,11 +374,13 @@ async function init() {
     .domain([1957, endYear])
     .range([1, processedData.length])
     .clamp(true);
+
   const yearScale = d3
     .scaleLinear()
     .domain([0.05, 0.65])
     .range([startYear, endYear])
     .clamp(true);
+
   const xTimeline = d3
     .scaleLinear()
     .domain([startYear, endYear])
@@ -367,359 +411,38 @@ async function init() {
   let isGlobeCentered = true;
   let lastRankingPanelKey = null;
 
-  setRankingToggleLabel();
-  rankingToggle.on("click", () => {
-    isRankingPanelVisible = !isRankingPanelVisible;
-    lastRankingPanelKey = null;
-    setRankingToggleLabel();
-    if (latestSceneState) {
-      applySceneState(latestSceneState);
-      updateRankingPanel(
-        latestSceneState,
-        Math.floor(latestSceneState.currentYear),
-      );
-    }
-  });
-  setCenterGlobeToggleLabel();
-  centerGlobeToggle.on("click", () => {
-    isGlobeCentered = !isGlobeCentered;
-    setCenterGlobeToggleLabel();
-    if (latestSceneState) {
-      applySceneState(latestSceneState);
-    }
-  });
-
-  timelineG
-    .append("line")
-    .attr("x1", xTimeline(startYear))
-    .attr("x2", xTimeline(endYear))
-    .attr("y1", timelineY)
-    .attr("y2", timelineY)
-    .attr("stroke", "rgba(255,255,255,0.15)")
-    .attr("stroke-width", 6)
-    .attr("stroke-linecap", "round");
-
-  const innovs = timelineG.selectAll(".innov").data(events).join("g");
-  innovs
-    .append("line")
-    .attr("x1", (d) => xTimeline(d.year))
-    .attr("x2", (d) => xTimeline(d.year))
-    .attr("y1", timelineY - 15)
-    .attr("y2", timelineY)
-    .attr("stroke", "#ff9a76")
-    .attr("stroke-width", 1.5);
-  innovs
-    .append("text")
-    .attr("x", (d) => xTimeline(d.year))
-    .attr("y", timelineY - 22)
-    .attr("text-anchor", "middle")
-    .style("fill", "#ff9a76")
-    .style("font-size", "11px")
-    .text((d) => d.label);
-
-  const pinG = timelineG.append("g");
-  pinG
-    .append("line")
-    .attr("y1", timelineY - 35)
-    .attr("y2", timelineY + 5)
-    .attr("stroke", "#ff4d4f")
-    .attr("stroke-width", 2);
-  pinG
-    .append("circle")
-    .attr("cy", timelineY - 38)
-    .attr("r", 6)
-    .attr("fill", "#ff4d4f");
-  const pinText = pinG
-    .append("text")
-    .attr("y", timelineY - 50)
-    .attr("text-anchor", "middle")
-    .style("fill", "#ff4d4f")
-    .style("font-weight", "bold");
-
-  const densityBins = d3
-    .bin()
-    .domain([0, 40000])
-    .thresholds(DENSITY_RING_COUNT)(processedData.map((d) => d.altitude))
-    .filter((b) => b.length > 0);
-  const densityArc = d3
-    .arc()
-    .startAngle(0)
-    .endAngle(2 * Math.PI);
-  const colorDensity = d3
-    .scaleSequential(d3.interpolateInferno)
-    .domain([
-      0,
-      Math.log10(d3.max(densityBins, (b) => b.length / (b.x1 - b.x0) + 1)),
-    ]);
-
-  densityLayer
-    .selectAll("path")
-    .data(densityBins)
-    .join("path")
-    .attr("d", (b) =>
-      densityArc({
-        innerRadius: rScaleGlobal(b.x0),
-        outerRadius: rScaleGlobal(b.x1),
-      }),
-    )
-    .attr("fill", (b) =>
-      colorDensity(Math.log10(b.length / (b.x1 - b.x0) + 1)),
-    );
-
-  const yearText = uiLayer
-    .append("text")
-    .attr("x", HEADER_TITLE_X)
-    .attr("y", 120)
-    .attr("text-anchor", "middle")
-    .style("font-size", "100px")
-    .style("font-weight", "900")
-    .style("fill", "rgba(226, 238, 255, 0.68)")
-    .text(startYear);
-
-  const countText = uiLayer
-    .append("text")
-    .attr("x", HEADER_TITLE_X)
-    .attr("y", 160)
-    .attr("text-anchor", "middle")
-    .style("font-size", "20px")
-    .style("fill", "#ffd166")
-    .text("0 Satellites");
-
-  const labelTextB = uiLayer
-    .append("text")
-    .attr("x", HEADER_TITLE_X)
-    .attr("y", HEADER_TITLE_Y)
-    .attr("text-anchor", "middle")
-    .attr("opacity", 0)
-    .style("font-size", "30px")
-    .style("fill", "white")
-    .text("Orbital Density 2026");
-  rankingLayer
-    .append("rect")
-    .attr("width", RANKING_PANEL_WIDTH)
-    .attr("height", RANKING_PANEL_HEIGHT)
-    .attr("rx", 18)
-    .attr("fill", "rgba(6, 12, 24, 0.74)")
-    .attr("stroke", "rgba(255, 209, 102, 0.18)")
-    .attr("stroke-width", 1);
-  const rankingTitle = rankingLayer
-    .append("text")
-    .attr("x", 16)
-    .attr("y", 24)
-    .style("font-size", "16px")
-    .style("font-weight", "700")
-    .style("fill", "rgba(248, 251, 255, 0.96)")
-    .text("Top 10 Launch Stations");
-  const rankingSubtitle = rankingLayer
-    .append("text")
-    .attr("x", 16)
-    .attr("y", 43)
-    .style("font-size", "11px")
-    .style("fill", "rgba(226, 238, 255, 0.66)");
-  rankingLayer
-    .append("line")
-    .attr("x1", 16)
-    .attr("x2", RANKING_PANEL_WIDTH - 16)
-    .attr("y1", RANKING_PANEL_HEADER_HEIGHT)
-    .attr("y2", RANKING_PANEL_HEADER_HEIGHT)
-    .attr("stroke", "rgba(255, 255, 255, 0.08)")
-    .attr("stroke-width", 1);
-  const rankingRowsLayer = rankingLayer
-    .append("g")
-    .attr("transform", `translate(16, ${RANKING_PANEL_HEADER_HEIGHT + 12})`);
-
-  const globalAxis = d3
-    .axisLeft(rScaleGlobal)
-    .ticks(6)
-    .tickFormat((d) => (d === 0 ? "" : `${d}km`));
-  globalAxisLayer.append("g").call(globalAxis).style("color", "#ff9a76");
-
-  function readScrollProgress() {
-    const rect = mount.node().getBoundingClientRect();
-    return Math.min(
-      1,
-      Math.max(0, -rect.top / (rect.height - window.innerHeight)),
-    );
-  }
-
-  function buildSceneState(scrollP) {
-    const zoomP = Math.max(0, (scrollP - 0.65) / 0.35);
-    const currentYear = yearScale(scrollP);
-    const globeShrinkP = d3.easeCubicOut(zoomP);
-    const currentCy = d3.interpolateNumber(tCy, dCy)(globeShrinkP);
-    const currentR = d3.interpolateNumber(tEarthR, dEarthR)(globeShrinkP);
-    const phase = getTransitionPhase(zoomP);
-    const handoffP = clamp(
-      (zoomP - GLOBE_PHASE_END) / (DENSITY_PHASE_START - GLOBE_PHASE_END),
-      0,
-      1,
-    );
-    const globeOpacity =
-      phase === "globe"
-        ? 1
-        : phase === "handoff"
-          ? 1 - d3.easeCubicInOut(Math.min(1, handoffP * 1.05))
-          : 0;
-    const barsOpacity =
-      phase === "globe"
-        ? 1
-        : 1 - d3.easeCubicIn(clamp((zoomP - GLOBE_PHASE_END) / 0.18, 0, 1));
-    const satelliteOpacity =
-      phase === "globe"
-        ? 1
-        : 1 - d3.easeCubicIn(clamp((zoomP - 0.5) / 0.26, 0, 1));
-    const timelineOpacity = 1 - d3.easeCubicIn(clamp(zoomP / 0.58, 0, 1));
-    const densityOpacity = d3.easeCubicOut(clamp((zoomP - 0.44) / 0.3, 0, 1));
-    const radialAxisOpacity = d3.easeCubicOut(
-      clamp((zoomP - 0.58) / 0.18, 0, 1),
-    );
-    const densityTitleOpacity = d3.easeCubicOut(
-      clamp((zoomP - 0.54) / 0.2, 0, 1),
-    );
-    const orbitTitleOpacity = 1 - d3.easeCubicIn(clamp(zoomP / 0.42, 0, 1));
-    const satelliteDrawRatio =
-      phase === "globe"
-        ? 0.028
-        : phase === "handoff"
-          ? d3.interpolateNumber(0.018, 0.006)(handoffP)
-          : 0.004;
+  function getLayoutMetrics(state = latestSceneState) {
+    const sceneLeft = CONTENT_PADDING_X;
+    const sceneRight = width - CONTENT_PADDING_X;
+    const sceneWidth = Math.max(280, sceneRight - sceneLeft);
+    const sceneCenterX = width / 2;
+    const centeredGlobeY = (CENTERED_SCENE_TOP + CENTERED_SCENE_BOTTOM) / 2;
+    const storytellingGlobeY = state?.currentCy ?? tCy;
 
     return {
-      scrollP,
-      zoomP,
-      phase,
-      handoffP,
-      currentYear,
-      currentCy,
-      currentR,
-      globeOpacity,
-      barsOpacity,
-      satelliteOpacity,
-      timelineOpacity,
-      densityOpacity,
-      radialAxisOpacity,
-      densityTitleOpacity,
-      orbitTitleOpacity,
-      satelliteDrawRatio,
+      sceneLeft,
+      sceneRight,
+      sceneWidth,
+      headerLeft: 180,
+      headerCenterX: sceneCenterX,
+      globeCenterX: width / 2,
+      globeCenterY: isGlobeCentered ? centeredGlobeY : storytellingGlobeY,
     };
   }
 
-  function applySceneState(state) {
-    latestSceneState = state;
-    const layout = getLayoutMetrics(state);
-    const globeCenterX = layout.globeCenterX;
-    const globeCenterY = layout.globeCenterY;
-    const sceneOpacity = Math.min(
-      state.timelineOpacity * 0.92,
-      state.barsOpacity,
+  function getGlobeCenterX() {
+    return getLayoutMetrics().globeCenterX;
+  }
+
+  function setRankingToggleLabel() {
+    rankingToggle.text(
+      isRankingPanelVisible ? "Top 10 Ranking: On" : "Top 10 Ranking: Off",
     );
-    const controlsOpacity =
-      1 - d3.easeCubicIn(clamp((state.zoomP - 0.6) / 0.2, 0, 1));
-
-    yearText
-      .attr("x", layout.headerCenterX)
-      .attr("y", HEADER_YEAR_Y)
-      .text(Math.floor(state.currentYear))
-      .style("opacity", Math.max(0, state.timelineOpacity * 1.05));
-    countText
-      .attr("x", layout.headerCenterX)
-      .attr("y", HEADER_COUNT_Y)
-      .style("opacity", state.timelineOpacity);
-    titleOverlay
-      .style("opacity", String(state.orbitTitleOpacity))
-      .style("transform", `translate(0, ${-state.handoffP * 28}px)`);
-    labelTextB
-      .attr("x", layout.headerCenterX)
-      .attr("y", HEADER_TITLE_Y)
-      .style("opacity", state.densityTitleOpacity);
-    hoverHintOverlay.style("opacity", String(Math.max(0, sceneOpacity * 0.82)));
-    rankingToggle
-      .style("opacity", String(controlsOpacity))
-      .style("pointer-events", controlsOpacity < 0.05 ? "none" : "auto");
-    centerGlobeToggle
-      .style("opacity", String(controlsOpacity))
-      .style("pointer-events", controlsOpacity < 0.05 ? "none" : "auto");
-    pinG.attr(
-      "transform",
-      `translate(${xTimeline(Math.floor(state.currentYear))}, 0)`,
-    );
-    pinText.text(Math.floor(state.currentYear));
-    timelineG.style("opacity", state.timelineOpacity);
-
-    earthGlow
-      .attr("cx", globeCenterX)
-      .attr("cy", globeCenterY)
-      .attr("r", state.currentR * 1.12)
-      .style(
-        "opacity",
-        Math.max(state.globeOpacity * 0.72, state.densityOpacity * 0.22),
-      );
-    earthCircle
-      .attr("cx", globeCenterX)
-      .attr("cy", globeCenterY)
-      .attr("r", state.currentR);
-    globeShade
-      .attr("cx", globeCenterX)
-      .attr("cy", globeCenterY + state.currentR * 0.12)
-      .attr("rx", state.currentR * 0.88)
-      .attr("ry", state.currentR * 0.92)
-      .style("opacity", state.globeOpacity);
-    globeHighlight
-      .attr("cx", globeCenterX)
-      .attr("cy", globeCenterY - state.currentR * 0.28)
-      .attr("rx", state.currentR * 0.5)
-      .attr("ry", state.currentR * 0.24)
-      .style("opacity", state.globeOpacity * 0.9);
-
-    defs
-      .select(`#${globeClipId} circle`)
-      .attr("cx", globeCenterX)
-      .attr("cy", globeCenterY)
-      .attr("r", state.currentR);
-
-    satLayer.style("opacity", state.satelliteOpacity);
-    globeLayer.style("opacity", state.globeOpacity);
-    launchBarLayer.style("opacity", state.barsOpacity);
-
-    if (state.barsOpacity < 0.08) {
-      hoveredLaunchSiteCode = null;
-      hideTooltip();
-    }
-
-    densityLayer
-      .style("opacity", state.densityOpacity)
-      .attr("transform", `translate(${globeCenterX}, ${globeCenterY})`);
-    globalAxisLayer
-      .style("opacity", state.radialAxisOpacity)
-      .attr("transform", `translate(${globeCenterX - 15}, ${globeCenterY})`);
   }
 
-  function getPointerPosition(event) {
-    const bounds = svg.node().getBoundingClientRect();
-    return {
-      x: ((event.clientX - bounds.left) / bounds.width) * width,
-      y: ((event.clientY - bounds.top) / bounds.height) * height,
-    };
-  }
-
-  function isPointerOnGlobe(point, state) {
-    if (!state || state.globeOpacity < 0.08) return false;
-    const layout = getLayoutMetrics(state);
-    const dx = point.x - layout.globeCenterX;
-    const dy = point.y - layout.globeCenterY;
-    return Math.hypot(dx, dy) <= state.currentR;
-  }
-
-  function setCursor(isDragging, isHoveringGlobe) {
-    svg.style(
-      "cursor",
-      isDragging
-        ? "grabbing"
-        : hoveredLaunchSiteCode
-          ? "pointer"
-          : isHoveringGlobe
-            ? "grab"
-            : "default",
+  function setCenterGlobeToggleLabel() {
+    centerGlobeToggle.text(
+      isGlobeCentered ? "Center Globe: On" : "Center Globe: Off",
     );
   }
 
@@ -780,41 +503,6 @@ async function init() {
       site.tipY,
       buildLaunchSiteTooltipHtml(site, site.count ?? null),
       site.labelX >= getGlobeCenterX(),
-    );
-  }
-
-  function getLayoutMetrics(state = latestSceneState) {
-    const sceneLeft = CONTENT_PADDING_X;
-    const sceneRight = width - CONTENT_PADDING_X;
-    const sceneWidth = Math.max(280, sceneRight - sceneLeft);
-    const sceneCenterX = width / 2;
-    const centeredGlobeY = (CENTERED_SCENE_TOP + CENTERED_SCENE_BOTTOM) / 2;
-    const storytellingGlobeY = state?.currentCy ?? tCy;
-
-    return {
-      sceneLeft,
-      sceneRight,
-      sceneWidth,
-      headerLeft: 180,
-      headerCenterX: sceneCenterX,
-      globeCenterX: width / 2,
-      globeCenterY: isGlobeCentered ? centeredGlobeY : storytellingGlobeY,
-    };
-  }
-
-  function getGlobeCenterX() {
-    return getLayoutMetrics().globeCenterX;
-  }
-
-  function setRankingToggleLabel() {
-    rankingToggle.text(
-      isRankingPanelVisible ? "Top 10 Ranking: On" : "Top 10 Ranking: Off",
-    );
-  }
-
-  function setCenterGlobeToggleLabel() {
-    centerGlobeToggle.text(
-      isGlobeCentered ? "Center Globe: On" : "Center Globe: Off",
     );
   }
 
@@ -949,6 +637,504 @@ async function init() {
     rows.exit().remove();
   }
 
+  setRankingToggleLabel();
+  rankingToggle.on("click", () => {
+    isRankingPanelVisible = !isRankingPanelVisible;
+    lastRankingPanelKey = null;
+    setRankingToggleLabel();
+    if (latestSceneState) {
+      applySceneState(latestSceneState);
+      updateRankingPanel(
+        latestSceneState,
+        Math.floor(latestSceneState.currentYear),
+      );
+    }
+  });
+
+  setCenterGlobeToggleLabel();
+  centerGlobeToggle.on("click", () => {
+    isGlobeCentered = !isGlobeCentered;
+    setCenterGlobeToggleLabel();
+    if (latestSceneState) {
+      applySceneState(latestSceneState);
+    }
+  });
+
+  timelineG
+    .append("line")
+    .attr("x1", xTimeline(startYear))
+    .attr("x2", xTimeline(endYear))
+    .attr("y1", timelineY)
+    .attr("y2", timelineY)
+    .attr("stroke", "rgba(255,255,255,0.15)")
+    .attr("stroke-width", 6)
+    .attr("stroke-linecap", "round");
+
+  const timelineEvents = events.filter((d) => d.year !== undefined);
+
+  const innovs = timelineG
+    .selectAll(".innov")
+    .data(timelineEvents)
+    .join("g")
+    .attr("class", "innov");
+
+  innovs
+    .append("line")
+    .attr("x1", (d) => xTimeline(d.year))
+    .attr("x2", (d) => xTimeline(d.year))
+    .attr("y1", timelineY - 15)
+    .attr("y2", timelineY)
+    .attr("stroke", "#ff9a76")
+    .attr("stroke-width", 1.5);
+
+  innovs
+    .append("text")
+    .attr("x", (d) => xTimeline(d.year))
+    .attr("y", timelineY - 22)
+    .attr("text-anchor", "middle")
+    .style("fill", "#ff9a76")
+    .style("font-size", "11px")
+    .text((d) => d.label);
+
+  const pinG = timelineG.append("g");
+  pinG
+    .append("line")
+    .attr("y1", timelineY - 35)
+    .attr("y2", timelineY + 5)
+    .attr("stroke", "#ff4d4f")
+    .attr("stroke-width", 2);
+
+  pinG
+    .append("circle")
+    .attr("cy", timelineY - 38)
+    .attr("r", 6)
+    .attr("fill", "#ff4d4f");
+
+  const pinText = pinG
+    .append("text")
+    .attr("y", timelineY - 50)
+    .attr("text-anchor", "middle")
+    .style("fill", "#ff4d4f")
+    .style("font-weight", "bold");
+
+  const densityBins = d3
+    .bin()
+    .domain([0, 40000])
+    .thresholds(DENSITY_RING_COUNT)(processedData.map((d) => d.altitude))
+    .filter((b) => b.length > 0);
+
+  const densityArc = d3.arc().startAngle(0).endAngle(2 * Math.PI);
+
+  const maxDensityLog = Math.log10(
+    d3.max(densityBins, (b) => b.length / (b.x1 - b.x0)) + 1,
+  );
+
+  const colorDensity = d3
+    .scaleSequential(d3.interpolateInferno)
+    .domain([0, maxDensityLog]);
+
+  densityLayer
+    .selectAll("path")
+    .data(densityBins)
+    .join("path")
+    .attr("d", (b) =>
+      densityArc({
+        innerRadius: rScaleGlobal(b.x0),
+        outerRadius: rScaleGlobal(b.x1),
+      }),
+    )
+    .attr("fill", (b) =>
+      colorDensity(Math.log10(b.length / (b.x1 - b.x0) + 1)),
+    );
+
+  const yearText = uiLayer
+    .append("text")
+    .attr("x", HEADER_TITLE_X)
+    .attr("y", 120)
+    .attr("text-anchor", "middle")
+    .style("font-size", "100px")
+    .style("font-weight", "900")
+    .style("fill", "rgba(226, 238, 255, 0.68)")
+    .text(startYear);
+
+  const countText = uiLayer
+    .append("text")
+    .attr("x", HEADER_TITLE_X)
+    .attr("y", 160)
+    .attr("text-anchor", "middle")
+    .style("font-size", "20px")
+    .style("fill", "#ffd166")
+    .text("0 Satellites");
+
+  const labelTextB = uiLayer
+    .append("text")
+    .attr("x", HEADER_TITLE_X)
+    .attr("y", HEADER_TITLE_Y)
+    .attr("text-anchor", "middle")
+    .attr("opacity", 0)
+    .style("font-size", "30px")
+    .style("fill", "white")
+    .text("Orbital Density 2026");
+
+  rankingLayer
+    .append("rect")
+    .attr("width", RANKING_PANEL_WIDTH)
+    .attr("height", RANKING_PANEL_HEIGHT)
+    .attr("rx", 18)
+    .attr("fill", "rgba(6, 12, 24, 0.74)")
+    .attr("stroke", "rgba(255, 209, 102, 0.18)")
+    .attr("stroke-width", 1);
+
+  const rankingTitle = rankingLayer
+    .append("text")
+    .attr("x", 16)
+    .attr("y", 24)
+    .style("font-size", "16px")
+    .style("font-weight", "700")
+    .style("fill", "rgba(248, 251, 255, 0.96)")
+    .text("Top 10 Launch Stations");
+
+  const rankingSubtitle = rankingLayer
+    .append("text")
+    .attr("x", 16)
+    .attr("y", 43)
+    .style("font-size", "11px")
+    .style("fill", "rgba(226, 238, 255, 0.66)");
+
+  rankingLayer
+    .append("line")
+    .attr("x1", 16)
+    .attr("x2", RANKING_PANEL_WIDTH - 16)
+    .attr("y1", RANKING_PANEL_HEADER_HEIGHT)
+    .attr("y2", RANKING_PANEL_HEADER_HEIGHT)
+    .attr("stroke", "rgba(255, 255, 255, 0.08)")
+    .attr("stroke-width", 1);
+
+  const rankingRowsLayer = rankingLayer
+    .append("g")
+    .attr("transform", `translate(16, ${RANKING_PANEL_HEADER_HEIGHT + 12})`);
+
+  const legendG = uiLayer
+    .append("g")
+    .attr("class", "density-legend")
+    .attr("transform", `translate(${width - 220}, ${height - 180})`)
+    .style("opacity", 0);
+
+  const legendGradientId = "density-gradient";
+  const legendGradient = defs
+    .append("linearGradient")
+    .attr("id", legendGradientId)
+    .attr("x1", "0%")
+    .attr("y1", "0%")
+    .attr("x2", "100%")
+    .attr("y2", "0%");
+
+  const legendSteps = 10;
+  legendGradient
+    .selectAll("stop")
+    .data(d3.range(legendSteps))
+    .join("stop")
+    .attr("offset", (d) => `${(d / (legendSteps - 1)) * 100}%`)
+    .attr("stop-color", (d) => d3.interpolateInferno(d / (legendSteps - 1)));
+
+  legendG
+    .append("rect")
+    .attr("width", 180)
+    .attr("height", 12)
+    .attr("rx", 4)
+    .attr("fill", `url(#${legendGradientId})`);
+
+  legendG
+    .append("text")
+    .attr("y", -10)
+    .style("fill", "rgba(226, 238, 255, 0.8)")
+    .style("font-size", "12px")
+    .style("font-weight", "bold")
+    .text("Orbital Density (Objects / km)");
+
+  const tickValues = [1, 10, 100];
+
+  legendG
+    .selectAll(".legend-tick")
+    .data(tickValues)
+    .join("g")
+    .attr("class", "legend-tick")
+    .attr("transform", (d) => {
+      const logVal = Math.log10(d + 1);
+      const xPos = (logVal / maxDensityLog) * 180;
+      return `translate(${xPos}, 0)`;
+    })
+    .call((g) => {
+      g.append("line")
+        .attr("y1", 0)
+        .attr("y2", 16)
+        .attr("stroke", "rgba(255, 255, 255, 0.3)");
+
+      g.append("text")
+        .attr("y", 28)
+        .attr("text-anchor", "middle")
+        .style("fill", "rgba(226, 238, 255, 0.7)")
+        .style("font-size", "10px")
+        .style("font-family", "monospace")
+        .text((d) => d);
+    });
+
+  const globalAxis = d3
+    .axisLeft(rScaleGlobal)
+    .ticks(6)
+    .tickFormat((d) => (d === 0 ? "" : `${d}km`));
+
+  globalAxisLayer.append("g").call(globalAxis).style("color", "#ff9a76");
+
+  const popupDiv = sticky.append("div").attr("class", "leo-popup");
+  const popupTitle = popupDiv.append("div").attr("class", "leo-popup__title");
+  const popupBody = popupDiv.append("div").attr("class", "leo-popup__body");
+
+  function readScrollProgress() {
+    const rect = mount.node().getBoundingClientRect();
+    return Math.min(
+      1,
+      Math.max(0, -rect.top / (rect.height - window.innerHeight)),
+    );
+  }
+
+  function updateTooltip(data, event) {
+    if (!data) {
+      hideTooltip();
+      return;
+    }
+
+    const [mX, mY] = d3.pointer(event, sticky.node());
+    const isRightSide = mX >= width / 2;
+    const x = mX + (isRightSide ? -180 : 20);
+    const y = mY - 40;
+
+    let htmlContent = "";
+
+    if (data.siteCode) {
+      htmlContent = `
+      <div style="font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#ffd166; margin-bottom:4px;">${data.siteCode}</div>
+      <div style="font-size:14px; font-weight:700; color:#ffffff; margin-bottom:4px;">${data.siteName}</div>
+      <div style="color:rgba(226, 238, 255, 0.82);">${data.country}</div>
+      <div style="margin-top:6px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.1); color:#6bff66;">
+        Total Launches: ${data.count.toLocaleString()}
+      </div>
+    `;
+    } else {
+      htmlContent = `
+      <div style="font-size:11px; color:#ffd166; margin-bottom:4px;">NORAD ID: ${data.id}</div>
+      <div style="font-size:14px; font-weight:700; color:#ffffff; margin-bottom:4px;">Payload</div>
+      <div style="color:rgba(226, 238, 255, 0.82);">Alt: ${Math.round(data.altitude)} km</div>
+      <div style="color:rgba(226, 238, 255, 0.82);">Launched: ${data.launchYear}</div>
+    `;
+    }
+
+    tooltip
+      .style("opacity", "1")
+      .style("transform", `translate(${x}px, ${y}px)`)
+      .html(htmlContent);
+  }
+
+  function buildSceneState(scrollP) {
+    const zoomP = Math.max(0, (scrollP - 0.65) / 0.35);
+    const currentYear = yearScale(scrollP);
+    const globeShrinkP = d3.easeCubicOut(zoomP);
+    const currentCy = d3.interpolateNumber(tCy, dCy)(globeShrinkP);
+    const currentR = d3.interpolateNumber(tEarthR, dEarthR)(globeShrinkP);
+    const phase = getTransitionPhase(zoomP);
+    const handoffP = clamp(
+      (zoomP - GLOBE_PHASE_END) / (DENSITY_PHASE_START - GLOBE_PHASE_END),
+      0,
+      1,
+    );
+
+    const globeOpacity =
+      phase === "globe"
+        ? 1
+        : phase === "handoff"
+          ? 1 - d3.easeCubicInOut(Math.min(1, handoffP * 1.05))
+          : 0;
+
+    const barsOpacity =
+      phase === "globe"
+        ? 1
+        : 1 - d3.easeCubicIn(clamp((zoomP - GLOBE_PHASE_END) / 0.18, 0, 1));
+
+    const satelliteOpacity =
+      phase === "globe"
+        ? 1
+        : 1 - d3.easeCubicIn(clamp((zoomP - 0.5) / 0.26, 0, 1));
+
+    const timelineOpacity = 1 - d3.easeCubicIn(clamp(zoomP / 0.58, 0, 1));
+    const densityOpacity = d3.easeCubicOut(clamp((zoomP - 0.44) / 0.3, 0, 1));
+    const radialAxisOpacity = d3.easeCubicOut(
+      clamp((zoomP - 0.58) / 0.18, 0, 1),
+    );
+    const densityTitleOpacity = d3.easeCubicOut(
+      clamp((zoomP - 0.54) / 0.2, 0, 1),
+    );
+    const orbitTitleOpacity = 1 - d3.easeCubicIn(clamp(zoomP / 0.42, 0, 1));
+
+    const satelliteDrawRatio =
+      phase === "globe"
+        ? 0.028
+        : phase === "handoff"
+          ? d3.interpolateNumber(0.018, 0.006)(handoffP)
+          : 0.004;
+
+    return {
+      scrollP,
+      zoomP,
+      phase,
+      handoffP,
+      currentYear,
+      currentCy,
+      currentR,
+      globeOpacity,
+      barsOpacity,
+      satelliteOpacity,
+      timelineOpacity,
+      densityOpacity,
+      radialAxisOpacity,
+      densityTitleOpacity,
+      orbitTitleOpacity,
+      satelliteDrawRatio,
+    };
+  }
+
+  function applySceneState(state) {
+    latestSceneState = state;
+    const layout = getLayoutMetrics(state);
+    const globeCenterX = layout.globeCenterX;
+    const globeCenterY = layout.globeCenterY;
+
+    const sceneOpacity = Math.min(
+      state.timelineOpacity * 0.92,
+      state.barsOpacity,
+    );
+
+    const controlsOpacity =
+      1 - d3.easeCubicIn(clamp((state.zoomP - 0.6) / 0.2, 0, 1));
+
+    yearText
+      .attr("x", layout.headerCenterX)
+      .attr("y", HEADER_YEAR_Y)
+      .text(Math.floor(state.currentYear))
+      .style("opacity", Math.max(0, state.timelineOpacity * 1.05));
+
+    countText
+      .attr("x", layout.headerCenterX)
+      .attr("y", HEADER_COUNT_Y)
+      .style("opacity", state.timelineOpacity);
+
+    titleOverlay
+      .style("opacity", String(state.orbitTitleOpacity))
+      .style("transform", `translate(0, ${-state.handoffP * 28}px)`);
+
+    labelTextB
+      .attr("x", layout.headerCenterX)
+      .attr("y", HEADER_TITLE_Y)
+      .style("opacity", state.densityTitleOpacity);
+
+    hoverHintOverlay.style("opacity", String(Math.max(0, sceneOpacity * 0.82)));
+
+    rankingToggle
+      .style("opacity", String(controlsOpacity))
+      .style("pointer-events", controlsOpacity < 0.05 ? "none" : "auto");
+
+    centerGlobeToggle
+      .style("opacity", String(controlsOpacity))
+      .style("pointer-events", controlsOpacity < 0.05 ? "none" : "auto");
+
+    pinG.attr(
+      "transform",
+      `translate(${xTimeline(Math.floor(state.currentYear))}, 0)`,
+    );
+    pinText.text(Math.floor(state.currentYear));
+    timelineG.style("opacity", state.timelineOpacity);
+
+    earthGlow
+      .attr("cx", globeCenterX)
+      .attr("cy", globeCenterY)
+      .attr("r", state.currentR * 1.12)
+      .style(
+        "opacity",
+        Math.max(state.globeOpacity * 0.72, state.densityOpacity * 0.22),
+      );
+
+    earthCircle
+      .attr("cx", globeCenterX)
+      .attr("cy", globeCenterY)
+      .attr("r", state.currentR);
+
+    globeShade
+      .attr("cx", globeCenterX)
+      .attr("cy", globeCenterY + state.currentR * 0.12)
+      .attr("rx", state.currentR * 0.88)
+      .attr("ry", state.currentR * 0.92)
+      .style("opacity", state.globeOpacity);
+
+    globeHighlight
+      .attr("cx", globeCenterX)
+      .attr("cy", globeCenterY - state.currentR * 0.28)
+      .attr("rx", state.currentR * 0.5)
+      .attr("ry", state.currentR * 0.24)
+      .style("opacity", state.globeOpacity * 0.9);
+
+    defs
+      .select(`#${globeClipId} circle`)
+      .attr("cx", globeCenterX)
+      .attr("cy", globeCenterY)
+      .attr("r", state.currentR);
+
+    satLayer.style("opacity", state.satelliteOpacity);
+    globeLayer.style("opacity", state.globeOpacity);
+    launchBarLayer.style("opacity", state.barsOpacity);
+    legendG.style("opacity", state.densityOpacity);
+
+    if (state.barsOpacity < 0.08) {
+      hoveredLaunchSiteCode = null;
+      hideTooltip();
+    }
+
+    densityLayer
+      .style("opacity", state.densityOpacity)
+      .attr("transform", `translate(${globeCenterX}, ${globeCenterY})`);
+
+    globalAxisLayer
+      .style("opacity", state.radialAxisOpacity)
+      .attr("transform", `translate(${globeCenterX - 15}, ${globeCenterY})`);
+  }
+
+  function getPointerPosition(event) {
+    const bounds = svg.node().getBoundingClientRect();
+    return {
+      x: ((event.clientX - bounds.left) / bounds.width) * width,
+      y: ((event.clientY - bounds.top) / bounds.height) * height,
+    };
+  }
+
+  function isPointerOnGlobe(point, state) {
+    if (!state || state.globeOpacity < 0.08) return false;
+    const layout = getLayoutMetrics(state);
+    const dx = point.x - layout.globeCenterX;
+    const dy = point.y - layout.globeCenterY;
+    return Math.hypot(dx, dy) <= state.currentR;
+  }
+
+  function setCursor(isDragging, isHoveringGlobe) {
+    svg.style(
+      "cursor",
+      isDragging
+        ? "grabbing"
+        : hoveredLaunchSiteCode
+          ? "pointer"
+          : isHoveringGlobe
+            ? "grab"
+            : "default",
+    );
+  }
+
   function autoCenterLon(elapsed) {
     return wrapDegrees(
       DEFAULT_GLOBE_LON_OFFSET + (elapsed / 1000) * AUTO_ROTATION_SPEED,
@@ -961,6 +1147,7 @@ async function init() {
     const autoLon = wrapDegrees(autoBaseLon + rotationState.autoLonOffset);
     const autoLat = DEFAULT_GLOBE_LAT;
     const now = performance.now();
+
     const returnToAuto =
       !rotationState.dragging &&
       now - rotationState.lastInteractionAt > MANUAL_RETURN_DELAY;
@@ -975,6 +1162,7 @@ async function init() {
         shortestAngleDelta(rotationState.displayLon, rotationState.manualLon) *
           ROTATION_LERP,
     );
+
     rotationState.displayLat = clamp(
       rotationState.displayLat +
         (rotationState.manualLat - rotationState.displayLat) * ROTATION_LERP,
@@ -1040,6 +1228,7 @@ async function init() {
 
     const resolvedYear = Math.floor(state.currentYear);
     const clampedYear = Math.min(resolvedYear, endYear);
+
     const activeLaunchSites =
       resolvedYear < LAUNCH_START_YEAR
         ? []
@@ -1047,6 +1236,7 @@ async function init() {
             0,
             MAX_GLOBE_SITES,
           );
+
     const maxBarHeight = state.currentR * BAR_HEIGHT_MAX_RATIO;
     const barHeightScale = d3
       .scaleSqrt()
@@ -1116,7 +1306,7 @@ async function init() {
         (exit) => exit.remove(),
       )
       .style("opacity", 1)
-      .on("pointerenter", (_, d) => {
+      .on("pointerenter", (event, d) => {
         hoveredLaunchSiteCode = d.site;
         renderLaunchTooltip(d);
         setCursor(false, true);
@@ -1186,9 +1376,7 @@ async function init() {
       .text((d) => (d.showLabel ? d.count.toLocaleString() : ""));
 
     if (hoveredLaunchSiteCode) {
-      const hoveredSite = visibleBars.find(
-        (d) => d.site === hoveredLaunchSiteCode,
-      );
+      const hoveredSite = visibleBars.find((d) => d.site === hoveredLaunchSiteCode);
       if (hoveredSite && state.barsOpacity > 0.08) {
         renderLaunchTooltip(hoveredSite);
       } else {
@@ -1205,6 +1393,7 @@ async function init() {
       event.preventDefault();
       const dx = point.x - rotationState.lastX;
       const dy = point.y - rotationState.lastY;
+
       rotationState.manualLon = wrapDegrees(
         rotationState.manualLon - dx * DRAG_LON_SENSITIVITY,
       );
@@ -1240,11 +1429,14 @@ async function init() {
   });
 
   function endDrag(event) {
-    if (!rotationState.dragging || event.pointerId !== rotationState.pointerId)
+    if (!rotationState.dragging || event.pointerId !== rotationState.pointerId) {
       return;
+    }
+
     if (svg.node().hasPointerCapture(event.pointerId)) {
       svg.node().releasePointerCapture(event.pointerId);
     }
+
     rotationState.autoLonOffset = wrapDegrees(
       rotationState.displayLon - rotationState.lastAutoBaseLon,
     );
@@ -1274,6 +1466,7 @@ async function init() {
     const now = performance.now();
     const dt = now - lastFrameAt;
     lastFrameAt = now;
+
     const lerp =
       1 - Math.pow(1 - DISPLAY_SCROLL_EASING, Math.max(1, dt / 16.67));
     displayScrollP += (targetScrollP - displayScrollP) * lerp;
@@ -1283,8 +1476,9 @@ async function init() {
     applySceneState(state);
 
     const resolvedYear = Math.floor(state.currentYear);
+    const targetCount = Math.floor(satelliteCountScale(state.currentYear));
+
     if (resolvedYear !== lastVisibleSatelliteYear) {
-      const targetCount = Math.floor(satelliteCountScale(state.currentYear));
       lastVisibleSatellites = processedData
         .filter(
           (d) =>
@@ -1311,19 +1505,30 @@ async function init() {
 
     updateGlobe(elapsed, state);
 
-    const drawCount =
-      state.phase === "density"
-        ? 0
-        : Math.min(
-            lastVisibleSatellites.length,
-            Math.max(
-              8,
-              Math.floor(
-                lastVisibleSatellites.length * state.satelliteDrawRatio,
-              ),
-            ),
-          );
-    const drawnSats = sampleEvenly(lastVisibleSatellites, drawCount);
+    let activePopupEvent = null;
+    let minPDiff = Infinity;
+
+    for (const ev of events) {
+      const diff = Math.abs(state.scrollP - ev.targetP);
+      if (diff < minPDiff) {
+        minPDiff = diff;
+        activePopupEvent = ev;
+      }
+    }
+
+    const popupOpacity =
+      minPDiff < POPUP_WINDOW_P ? 1 - minPDiff / POPUP_WINDOW_P : 0;
+
+    if (activePopupEvent) {
+      popupTitle.text(activePopupEvent.label || "Orbital Overview");
+      popupBody.text(activePopupEvent.annotation);
+      popupDiv.style("opacity", popupOpacity);
+    }
+
+    const drawnSats = lastVisibleSatellites.slice(
+      0,
+      Math.max(targetCount / 40, 1),
+    );
     const circles = satLayer.selectAll("circle").data(drawnSats, (d) => d.id);
 
     circles
@@ -1333,6 +1538,9 @@ async function init() {
             .append("circle")
             .attr("r", 1.2)
             .attr("fill", "#ffd166")
+            .style("stroke", "transparent")
+            .style("stroke-width", "12px")
+            .style("cursor", "pointer")
             .style("opacity", 0)
             .call((enter) =>
               enter.transition().duration(300).style("opacity", 0.8),
@@ -1353,7 +1561,25 @@ async function init() {
           getLayoutMetrics(state).globeCenterY +
           Math.sin(d.baseAngle + t * d.drift) *
             (state.currentR + d.relativeAlt),
-      );
+      )
+      .on("pointerenter", (event, d) => {
+        d3.select(event.currentTarget)
+          .transition()
+          .duration(100)
+          .attr("r", 5)
+          .attr("fill", "#fff");
+
+        updateTooltip(d, event);
+      })
+      .on("pointerleave", (event) => {
+        d3.select(event.currentTarget)
+          .transition()
+          .duration(100)
+          .attr("r", 1.2)
+          .attr("fill", "#ffd166");
+
+        updateTooltip(null);
+      });
   });
 }
 
