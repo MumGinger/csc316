@@ -115,7 +115,8 @@ const HELPER_OVERLAY_BOTTOM = 24;
 const CENTERED_SCENE_TOP = 214;
 const CENTERED_SCENE_BOTTOM = 784;
 const RANKING_PANEL_X = CONTROLS_LEFT;
-const RANKING_PANEL_Y = CONTROLS_TOP + TOGGLE_HEIGHT * 2 + TOGGLE_STACK_GAP + RANKING_PANEL_GAP;
+const RANKING_PANEL_Y =
+  CONTROLS_TOP + TOGGLE_HEIGHT * 2 + TOGGLE_STACK_GAP + RANKING_PANEL_GAP;
 const RANKING_PANEL_WIDTH = 288;
 const RANKING_PANEL_HEIGHT = 308;
 const RANKING_PANEL_HEADER_HEIGHT = 58;
@@ -125,6 +126,24 @@ const RANKING_PANEL_VALUE_X = 220;
 const RANKING_ROW_HEIGHT = 24;
 const RANKING_BAR_HEIGHT = 12;
 const CONTENT_PADDING_X = 36;
+const titleOverlay = sticky
+  .append("div")
+  .attr("class", "payload-title-overlay")
+  .style("position", "absolute")
+  .style("left", HEADER_TITLE_X + "px")
+  .style("top", HEADER_TITLE_Y + "px")
+  .style("z-index", "4")
+  .style("pointer-events", "none")
+  .style("color", "rgba(226, 238, 255, 0.74)")
+  .style("font-family", "system-ui, sans-serif")
+  .style("font-size", "24px")
+  .style("font-weight", "700")
+  .style("letter-spacing", "0.01em")
+  .style("line-height", "1.1")
+  .style("white-space", "nowrap")
+  .style("opacity", "0")
+  .style("transform", "translate(0, 0)")
+  .text("Payloads in orbit 1957-2025");
 const svg = sticky
   .append("svg")
   .attr("viewBox", `0 0 ${width} ${height}`)
@@ -242,9 +261,7 @@ const rankingSvg = rankingCard
   .style("height", "100%")
   .style("display", "block");
 
-const rankingLayer = rankingSvg
-  .append("g")
-  .attr("class", "ranking-panel");
+const rankingLayer = rankingSvg.append("g").attr("class", "ranking-panel");
 
 const rScaleGlobal = d3
   .scalePow()
@@ -357,7 +374,10 @@ async function init() {
     setRankingToggleLabel();
     if (latestSceneState) {
       applySceneState(latestSceneState);
-      updateRankingPanel(latestSceneState, Math.floor(latestSceneState.currentYear));
+      updateRankingPanel(
+        latestSceneState,
+        Math.floor(latestSceneState.currentYear),
+      );
     }
   });
   setCenterGlobeToggleLabel();
@@ -448,7 +468,7 @@ async function init() {
 
   const yearText = uiLayer
     .append("text")
-     .attr("x", HEADER_TITLE_X)
+    .attr("x", HEADER_TITLE_X)
     .attr("y", 120)
     .attr("text-anchor", "middle")
     .style("font-size", "100px")
@@ -464,17 +484,6 @@ async function init() {
     .style("font-size", "20px")
     .style("fill", "#ffd166")
     .text("0 Satellites");
-
-  const labelText = uiLayer
-    .append("text")
-    .attr("x", 0)
-    .attr("y", HEADER_TITLE_Y)
-    .attr("text-anchor", "start")
-    .style("font-size", "24px")
-    .style("font-weight", "700")
-    .style("letter-spacing", "0.01em")
-    .style("fill", "rgba(226, 238, 255, 0.74)")
-    .text("Payloads in orbit 1957-2025");
 
   const labelTextB = uiLayer
     .append("text")
@@ -600,7 +609,10 @@ async function init() {
     const layout = getLayoutMetrics(state);
     const globeCenterX = layout.globeCenterX;
     const globeCenterY = layout.globeCenterY;
-    const sceneOpacity = Math.min(state.timelineOpacity * 0.92, state.barsOpacity);
+    const sceneOpacity = Math.min(
+      state.timelineOpacity * 0.92,
+      state.barsOpacity,
+    );
     const controlsOpacity =
       1 - d3.easeCubicIn(clamp((state.zoomP - 0.6) / 0.2, 0, 1));
 
@@ -613,10 +625,9 @@ async function init() {
       .attr("x", layout.headerCenterX)
       .attr("y", HEADER_COUNT_Y)
       .style("opacity", state.timelineOpacity);
-    labelText
-      .attr("x", HEADER_TITLE_X)
-      .attr("y", HEADER_TITLE_Y)
-      .style("opacity", state.orbitTitleOpacity);
+    titleOverlay
+      .style("opacity", String(state.orbitTitleOpacity))
+      .style("transform", `translate(0, ${-state.handoffP * 28}px)`);
     labelTextB
       .attr("x", layout.headerCenterX)
       .attr("y", HEADER_TITLE_Y)
@@ -719,9 +730,10 @@ async function init() {
   }
 
   function buildLaunchSiteTooltipHtml(site, count = null) {
-    const countMarkup = count === null
-      ? ""
-      : `<div style="margin-top:6px; color:rgba(255, 240, 194, 0.88);">${count.toLocaleString()} cumulative launches</div>`;
+    const countMarkup =
+      count === null
+        ? ""
+        : `<div style="margin-top:6px; color:rgba(255, 240, 194, 0.88);">${count.toLocaleString()} cumulative launches</div>`;
 
     return (
       `<div style="font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:#ffd166; margin-bottom:4px;">${site.siteCode}</div>` +
@@ -1038,7 +1050,10 @@ async function init() {
     const maxBarHeight = state.currentR * BAR_HEIGHT_MAX_RATIO;
     const barHeightScale = d3
       .scaleSqrt()
-      .domain([BAR_MIN_VISIBLE_COUNT, Math.max(BAR_MIN_VISIBLE_COUNT + 1, globalLaunchSiteMaxCount)])
+      .domain([
+        BAR_MIN_VISIBLE_COUNT,
+        Math.max(BAR_MIN_VISIBLE_COUNT + 1, globalLaunchSiteMaxCount),
+      ])
       .range([0, maxBarHeight])
       .clamp(true);
 
@@ -1157,7 +1172,9 @@ async function init() {
       .select("text.bar-count")
       .attr("x", (d) => d.labelX)
       .attr("y", (d) => d.labelY)
-      .attr("text-anchor", (d) => (d.labelX >= globeCenter[0] ? "start" : "end"))
+      .attr("text-anchor", (d) =>
+        d.labelX >= globeCenter[0] ? "start" : "end",
+      )
       .attr("dominant-baseline", "middle")
       .attr("font-size", (d) => d.labelFontSize + "px")
       .attr("font-weight", 700)
@@ -1284,9 +1301,6 @@ async function init() {
     countText
       .text(`${lastVisibleSatellites.length.toLocaleString()} Satellites`)
       .style("opacity", state.timelineOpacity);
-    labelText
-      .style("opacity", state.orbitTitleOpacity)
-      .attr("transform", `translate(0, ${-state.handoffP * 28})`);
 
     labelTextB
       .style("opacity", state.densityTitleOpacity)
@@ -1413,18 +1427,3 @@ function mulberry32(a) {
 }
 
 init();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
