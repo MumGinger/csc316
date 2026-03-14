@@ -1,4 +1,4 @@
-﻿import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
 import { feature } from "https://cdn.jsdelivr.net/npm/topojson-client@3/+esm";
 import {
   CONTINENT_LABELS,
