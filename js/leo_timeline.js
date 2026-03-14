@@ -274,7 +274,7 @@ const rScaleGlobal = d3
 const events = [
   {
     year: 1957,
-    targetP: 0.10,
+    targetP: 0.1,
     label: "Sputnik 1",
     annotation:
       "Oct 4, 1957: The Soviet Union launched Sputnik 1, the world's first artificial satellite. The 58 cm aluminum sphere orbited Earth every 96 minutes, transmitting a radio beep heard worldwide — marking the dawn of the Space Age.",
@@ -407,7 +407,7 @@ async function init() {
   let lastVisibleSatelliteYear = null;
   let lastVisibleSatellites = [];
   let hoveredLaunchSiteCode = null;
-  let isRankingPanelVisible = false;
+  let isRankingPanelVisible = true;
   let isGlobeCentered = true;
   let lastRankingPanelKey = null;
 
@@ -723,7 +723,10 @@ async function init() {
     .thresholds(DENSITY_RING_COUNT)(processedData.map((d) => d.altitude))
     .filter((b) => b.length > 0);
 
-  const densityArc = d3.arc().startAngle(0).endAngle(2 * Math.PI);
+  const densityArc = d3
+    .arc()
+    .startAngle(0)
+    .endAngle(2 * Math.PI);
 
   const maxDensityLog = Math.log10(
     d3.max(densityBins, (b) => b.length / (b.x1 - b.x0)) + 1,
@@ -766,14 +769,23 @@ async function init() {
     .style("fill", "#ffd166")
     .text("0 Satellites");
 
-  const labelTextB = uiLayer
-    .append("text")
-    .attr("x", HEADER_TITLE_X)
-    .attr("y", HEADER_TITLE_Y)
-    .attr("text-anchor", "middle")
-    .attr("opacity", 0)
-    .style("font-size", "30px")
-    .style("fill", "white")
+  const densityTitleOverlay = sticky
+    .append("div")
+    .attr("class", "density-title-overlay")
+    .style("position", "absolute")
+    .style("left", HEADER_TITLE_X + "px")
+    .style("top", HEADER_TITLE_Y + 100 + "px")
+    .style("z-index", "4")
+    .style("pointer-events", "none")
+    .style("color", "rgba(226, 238, 255, 0.74)")
+    .style("font-family", "system-ui, sans-serif")
+    .style("font-size", "24px")
+    .style("font-weight", "700")
+    .style("letter-spacing", "0.01em")
+    .style("line-height", "1.1")
+    .style("white-space", "nowrap")
+    .style("opacity", "0")
+    .style("transform", "translate(-50%, 20px)")
     .text("Orbital Density 2026");
 
   rankingLayer
@@ -1031,10 +1043,10 @@ async function init() {
       .style("opacity", String(state.orbitTitleOpacity))
       .style("transform", `translate(0, ${-state.handoffP * 28}px)`);
 
-    labelTextB
-      .attr("x", layout.headerCenterX)
-      .attr("y", HEADER_TITLE_Y)
-      .style("opacity", state.densityTitleOpacity);
+    densityTitleOverlay
+      .style("left", `${layout.headerCenterX + 50}px`)
+      .style("top", `${HEADER_TITLE_Y}px`)
+      .style("opacity", String(state.densityTitleOpacity));
 
     hoverHintOverlay.style("opacity", String(Math.max(0, sceneOpacity * 0.82)));
 
@@ -1376,7 +1388,9 @@ async function init() {
       .text((d) => (d.showLabel ? d.count.toLocaleString() : ""));
 
     if (hoveredLaunchSiteCode) {
-      const hoveredSite = visibleBars.find((d) => d.site === hoveredLaunchSiteCode);
+      const hoveredSite = visibleBars.find(
+        (d) => d.site === hoveredLaunchSiteCode,
+      );
       if (hoveredSite && state.barsOpacity > 0.08) {
         renderLaunchTooltip(hoveredSite);
       } else {
@@ -1429,7 +1443,10 @@ async function init() {
   });
 
   function endDrag(event) {
-    if (!rotationState.dragging || event.pointerId !== rotationState.pointerId) {
+    if (
+      !rotationState.dragging ||
+      event.pointerId !== rotationState.pointerId
+    ) {
       return;
     }
 
@@ -1496,11 +1513,11 @@ async function init() {
       .text(`${lastVisibleSatellites.length.toLocaleString()} Satellites`)
       .style("opacity", state.timelineOpacity);
 
-    labelTextB
-      .style("opacity", state.densityTitleOpacity)
-      .attr(
+    densityTitleOverlay
+      .style("opacity", String(state.densityTitleOpacity))
+      .style(
         "transform",
-        `translate(0, ${d3.interpolateNumber(20, 0)(state.densityTitleOpacity)})`,
+        `translate(-50%, ${d3.interpolateNumber(20, 0)(state.densityTitleOpacity)}px)`,
       );
 
     updateGlobe(elapsed, state);
