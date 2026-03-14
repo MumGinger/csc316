@@ -75,7 +75,7 @@ const GLOBE_PHASE_END = 0.45;
 const DENSITY_PHASE_START = 0.75;
 const DISPLAY_SCROLL_EASING = 0.14;
 const DENSITY_RING_COUNT = 350;
-const POPUP_WINDOW_P = 0.05;
+const POPUP_WINDOW_P = 0.15;
 
 
 const defs = svg.append("defs");
@@ -181,12 +181,20 @@ const events = [
       "Nov 20, 1998: Russia launched Zarya, the first ISS module. A joint project of 15 nations, the International Space Station has been continuously inhabited since Nov 2000 — the largest human-made structure ever placed in orbit.",
   },
   {
+    targetP: 0.55,
+    annotation: "Over time, satellites are retiring less often. Longer lifespans and delayed disposal mean objects linger in LEO, keeping the region crowded."
+  },
+  {
     year: 2019,
-    targetP: 0.60,
+    targetP: 0.66,
     label: "Starlink",
     annotation:
       "May 23, 2019: SpaceX launched its first 60 Starlink satellites, beginning the largest constellation in history. By 2025, over 6,000 Starlink satellites orbit Earth, providing global broadband and dramatically reshaping the orbital environment.",
   },
+  {
+    targetP: 1,
+    annotation: "85–90% of cataloged objects are in Low Earth Orbit (LEO). This is where critical infrastructure lives: the ISS, Starlink, Earth imaging, and science missions. High utilization means higher collision risk, and unlike GEO, there is no strong incentive to move objects to graveyard orbits."
+  }
 ];
 
 const globeProjection = d3.geoOrthographic().precision(0.4).clipAngle(90);
@@ -285,8 +293,12 @@ async function init() {
     .attr("stroke", "rgba(255,255,255,0.15)")
     .attr("stroke-width", 6)
     .attr("stroke-linecap", "round");
+  const timelineEvents = events.filter(d => d.year !== undefined);
 
-  const innovs = timelineG.selectAll(".innov").data(events).join("g");
+  const innovs = timelineG.selectAll(".innov")
+    .data(timelineEvents)
+    .join("g")
+    .attr("class", "innov");
   innovs
     .append("line")
     .attr("x1", (d) => xTimeline(d.year))
@@ -332,12 +344,10 @@ async function init() {
     .arc()
     .startAngle(0)
     .endAngle(2 * Math.PI);
-  const colorDensity = d3
-    .scaleSequential(d3.interpolateInferno)
-    .domain([
-      0,
-      Math.log10(d3.max(densityBins, (b) => b.length / (b.x1 - b.x0) + 1)),
-    ]);
+  const maxDensityLog = Math.log10(d3.max(densityBins, b => b.length / (b.x1 - b.x0)) + 1);
+
+  const colorDensity = d3.scaleSequential(d3.interpolateInferno)
+    .domain([0, maxDensityLog]);
 
   densityLayer
     .selectAll("path")
@@ -390,6 +400,63 @@ async function init() {
     .style("font-size", "30px")
     .style("fill", "white")
     .text("Orbital Density 2026");
+
+  const legendG = uiLayer.append("g")
+    .attr("class", "density-legend")
+    .attr("transform", `translate(${width - 220}, ${height - 180})`)
+    .style("opacity", 0);
+
+  const legendGradientId = "density-gradient";
+  const legendGradient = defs.append("linearGradient")
+    .attr("id", legendGradientId)
+    .attr("x1", "0%").attr("y1", "0%")
+    .attr("x2", "100%").attr("y2", "0%");
+
+  const legendSteps = 10;
+  legendGradient.selectAll("stop")
+    .data(d3.range(legendSteps))
+    .join("stop")
+    .attr("offset", d => `${(d / (legendSteps - 1)) * 100}%`)
+    .attr("stop-color", d => d3.interpolateInferno(d / (legendSteps - 1)));
+
+  legendG.append("rect")
+    .attr("width", 180)
+    .attr("height", 12)
+    .attr("rx", 4)
+    .attr("fill", `url(#${legendGradientId})`);
+
+  legendG.append("text")
+    .attr("y", -10)
+    .style("fill", "rgba(226, 238, 255, 0.8)")
+    .style("font-size", "12px")
+    .style("font-weight", "bold")
+    .text("Orbital Density (Objects / km)");
+
+  const tickValues = [1, 10, 100];
+
+  legendG.selectAll(".legend-tick")
+    .data(tickValues)
+    .join("g")
+    .attr("class", "legend-tick")
+    .attr("transform", d => {
+      const logVal = Math.log10(d + 1);
+      const xPos = (logVal / maxDensityLog) * 180;
+      return `translate(${xPos}, 0)`;
+    })
+    .call(g => {
+      g.append("line")
+        .attr("y1", 0)
+        .attr("y2", 16)
+        .attr("stroke", "rgba(255, 255, 255, 0.3)");
+
+      g.append("text")
+        .attr("y", 28)
+        .attr("text-anchor", "middle")
+        .style("fill", "rgba(226, 238, 255, 0.7)")
+        .style("font-size", "10px")
+        .style("font-family", "monospace")
+        .text(d => d);
+    });
 
   const globalAxis = d3
     .axisLeft(rScaleGlobal)
@@ -547,6 +614,7 @@ async function init() {
     satLayer.style("opacity", state.satelliteOpacity);
     globeLayer.style("opacity", state.globeOpacity);
     launchBarLayer.style("opacity", state.barsOpacity);
+    legendG.style("opacity", state.densityOpacity);
 
     if (state.barsOpacity < 0.08) {
       hoveredLaunchSiteCode = null;
@@ -943,16 +1011,17 @@ async function init() {
         activePopupEvent = ev;
       }
     }
+
     const popupOpacity = minPDiff < POPUP_WINDOW_P
       ? (1 - minPDiff / POPUP_WINDOW_P)
       : 0;
 
     if (activePopupEvent) {
-      popupTitle.text(activePopupEvent.label);
+      popupTitle.text(activePopupEvent.label || "Orbital Overview");
       popupBody.text(activePopupEvent.annotation);
+
       popupDiv.style("opacity", popupOpacity);
     }
-    popupDiv.style("opacity", popupOpacity);
 
     const drawnSats = lastVisibleSatellites.slice(0, Math.max(targetCount / 40, 1));
     const circles = satLayer.selectAll("circle").data(drawnSats, (d) => d.id);

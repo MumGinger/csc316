@@ -39,6 +39,7 @@
 .group-holder img {
   margin: auto;
   max-height: 75%;
+  max-width: 50%;
 }
 
 .group-holder .title {
