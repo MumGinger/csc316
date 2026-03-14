@@ -82,16 +82,6 @@ export default function initCrashViz(containerId = "crash-viz") {
     .style('fill', '#ddd')
     .style('font-size', '11px');
 
-  xAxisG.append('text')
-    .attr('x', lcWidth / 2)
-    .attr('y', 44)
-    .attr('text-anchor', 'middle')
-    .style('fill', '#ddd')
-    .attr('fill', '#ddd')
-    .style('font-family', 'sans-serif')
-    .style('font-size', '12px')
-    .text('years');
-
   const yAxisG = lcG.append('g')
     .call(yAxisLC);
 
