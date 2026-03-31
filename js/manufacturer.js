@@ -8,6 +8,15 @@ const height = 500 - margin.top - margin.bottom;
 
 const container = d3.select("#manufacturer");
 
+container.append('div')
+  .attr('class', 'manufacturer-hint')
+  .text('Hover over the dots to see extra info!')
+  .style('font-family', 'sans-serif')
+  .style('font-size', '20px')
+  .style('color', '#ddd')
+  .style('margin-bottom', '6px')
+  .style('text-align', 'center');
+
 // SVG
 const svg = container.append("svg")
   .attr("width", width + margin.left + margin.right)
@@ -49,7 +58,11 @@ const xAxisTitle = svg.append("text")
 let seriesGroup = svg.append("g").attr("class", "series");
 
 container.style("position", "relative");
-const tooltip = container.append("div").attr("class", "manufacturer-tooltip");
+const tooltip = container.append("div")
+  .attr("class", "manufacturer-tooltip")
+  .style("position", "absolute")
+  .style("display", "none")
+  .style("pointer-events", "none");
 
 // Data holder
 let _data = [];
@@ -140,7 +153,6 @@ function updateVisualization() {
   const years = Array.from(new Set(_data.map(d => d.year))).sort((a, b) => a - b);
   if (years.length === 0) return;
 
-  // Determine visible years from brush selection (if any). If no brush, show all years.
   let visibleYears = years;
   if (window.currentBrushRange && window.currentBrushRange.length === 2) {
     visibleYears = years.filter(y => y >= window.currentBrushRange[0] && y <= window.currentBrushRange[1]);
@@ -223,7 +235,7 @@ function updateVisualization() {
     .attr("d", d => lineGen(d.values))
     .attr("fill", "none")
     .attr("stroke", d => color(d.key))
-    .attr("stroke-width", d => top.includes(d.key) ? 1.8 : 1.0)
+    .attr("stroke-width", d => top.includes(d.key) ? 2.6 : 1.8)
     .attr("opacity", d => top.includes(d.key) ? 0.95 : 0.12)
     .attr("id", d => `series-${CSS.escape(d.key)}`);
 
@@ -233,7 +245,7 @@ function updateVisualization() {
     .append("circle")
       .attr("cx", d => x(d.year))
       .attr("cy", d => y(d.count))
-      .attr("r", d => top.includes(d.key) ? 2.8 : 1.6)
+      .attr("r", d => top.includes(d.key) ? 3.6 : 2.4)
       .attr("fill", d => color(d.key))
       .attr("opacity", d => top.includes(d.key) ? 0.9 : 0.08)
       .each(function(d) {
@@ -260,14 +272,21 @@ function updateVisualization() {
     highlightKey(d.key);
     tooltip.style("display", "block");
     updateTooltipContent(d);
+    onPointMove(null, d);
   }
 
   function onPointMove(event, d) {
-    const rect = container.node().getBoundingClientRect();
-    const left = event.clientX - rect.left + 12;
-    const top = event.clientY - rect.top + 12;
-    tooltip.style("left", `${left}px`).style("top", `${top}px`);
     updateTooltipContent(d);
+    const rect = container.node().getBoundingClientRect();
+    const ttNode = tooltip.node();
+    const ttW = ttNode ? ttNode.offsetWidth : 140;
+    const ttH = ttNode ? ttNode.offsetHeight : 48;
+
+    let left = x(d.year) + margin.left + 12; 
+    let top = y(d.count) + margin.top - (ttH / 2);
+    left = Math.max(6, Math.min(left, rect.width - ttW - 6));
+    top = Math.max(6, Math.min(top, rect.height - ttH - 6));
+    tooltip.style("left", `${left}px`).style("top", `${top}px`);
   }
 
   function onPointOut(event, d) {

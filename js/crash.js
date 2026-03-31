@@ -24,13 +24,22 @@ export default function initCrashViz(containerId = "crash-viz") {
   container.selectAll("*").remove();
   container.style("position", "relative");
 
+  container.append('div')
+    .attr('class', 'crash-hint')
+    .text('Hover over points')
+    .style('font-family', 'sans-serif')
+    .style('font-size', '20px')
+    .style('color', '#ddd')
+    .style('margin-bottom', '6px')
+    .style('text-align', 'center');
+
   const parsed = data
     .map(d => ({ ...d, dateObj: new Date(d.date) }))
     .sort((a, b) => a.dateObj - b.dateObj);
 
     const outerWidth = Math.max(420, Math.min(920, container.node().getBoundingClientRect().width || 700));
-    const outerHeight = 520;
-    const margin = { top: 36, right: 30, bottom: 36, left: 60 };
+  const outerHeight = 580;
+  const margin = { top: 36, right: 30, bottom: 48, left: 60 };
     const width = outerWidth - margin.left - margin.right;
     const height = outerHeight - margin.top - margin.bottom;
   const lcHeight = Math.min(160, Math.floor(height * 0.38));
@@ -167,25 +176,25 @@ export default function initCrashViz(containerId = "crash-viz") {
 
   const valueText = centerGroup.append("text")
     .attr("text-anchor", "middle")
-    .attr("y", -10)
+    .attr("y", -12)
     .style("font-family", "sans-serif")
-    .style("font-size", "34px")
+    .style("font-size", "42px")
     .style("font-weight", "700")
     .style("fill", "#fff");
 
   centerGroup.append("text")
     .attr("text-anchor", "middle")
-    .attr("y", 18)
+    .attr("y", 20)
     .style("font-family", "sans-serif")
-    .style("font-size", "13px")
+    .style("font-size", "14px")
     .style("fill", "#ccc")
     .text("expected time to potential collision");
 
   const dateText = centerGroup.append("text")
     .attr("text-anchor", "middle")
-    .attr("y", 40)
+    .attr("y", 44)
     .style("font-family", "sans-serif")
-    .style("font-size", "13px")
+    .style("font-size", "16px")
     .style("fill", "#bbb");
 
   const needleGroup = g.append("g").attr("class", "needle");

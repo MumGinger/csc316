@@ -67,6 +67,19 @@ export default class Timeline {
       .attr("class", "brush")
       .call(vis.brush);
 
+    // Set a default brush 
+    try {
+      const years = vis._displayData.map(d => d.year).sort((a,b) => a - b);
+      if (years.length > 0) {
+        const endIndex = Math.min(10, years.length) - 1;
+        const startYear = years[0];
+        const endYear = years[endIndex];
+        const selPixels = [vis.x(startYear), vis.x(endYear)];
+        vis.svg.select('.brush').call(vis.brush.move, selPixels);
+      }
+    } catch (e) {
+    }
+
     // Append x-axis
     vis.svg.append("g")
       .attr("class", "x-axis axis")
