@@ -55,7 +55,7 @@ const rankingToggle = sticky
   .style("border-radius", "999px")
   .style("background", "rgba(9, 16, 32, 0.82)")
   .style("color", "#f8fbff")
-  .style("font-size", "12px")
+  .style("font-size", "16px")
   .style("font-weight", "600")
   .style("letter-spacing", "0.02em")
   .style("cursor", "pointer")
@@ -73,7 +73,7 @@ const centerGlobeToggle = sticky
   .style("border-radius", "999px")
   .style("background", "rgba(9, 16, 32, 0.82)")
   .style("color", "#f8fbff")
-  .style("font-size", "12px")
+  .style("font-size", "16px")
   .style("font-weight", "600")
   .style("letter-spacing", "0.02em")
   .style("cursor", "pointer")
@@ -83,18 +83,23 @@ const hoverHintOverlay = sticky
   .append("div")
   .attr("class", "launch-site-helper-note")
   .style("position", "absolute")
-  .style("left", "20px")
-  .style("bottom", "24px")
+  .style("left", "30px")
+  .style("bottom", "50px")
   .style("z-index", "4")
   .style("pointer-events", "none")
   .style("color", "rgba(226, 238, 255, 0.56)")
   .style("font-family", "system-ui, sans-serif")
-  .style("font-size", "12px")
+  .style("font-size", "16px")
   .style("letter-spacing", "0.03em")
-  .style("line-height", "7")
+  .style("line-height", "1.5")
   .style("text-align", "left")
   .style("opacity", "0")
-  .text("Hover over a bar to see launch site details");
+  // .text("Hover over a bar to see launch site details");
+  .html(`
+    Hover over a bar to see launch site details<br>
+    Scroll down to explore the timeline
+  `);
+  
 
 const width = 900;
 const height = 900;
@@ -801,7 +806,7 @@ async function init() {
     .append("text")
     .attr("x", 16)
     .attr("y", 24)
-    .style("font-size", "16px")
+    .style("font-size", "20px")
     .style("font-weight", "700")
     .style("fill", "rgba(248, 251, 255, 0.96)")
     .text("Top 10 Launch Stations");
@@ -810,7 +815,7 @@ async function init() {
     .append("text")
     .attr("x", 16)
     .attr("y", 43)
-    .style("font-size", "11px")
+    .style("font-size", "13px")
     .style("fill", "rgba(226, 238, 255, 0.66)");
 
   rankingLayer
@@ -1366,7 +1371,7 @@ async function init() {
       .select("circle.bar-anchor")
       .attr("cx", (d) => d.baseX)
       .attr("cy", (d) => d.baseY)
-      .attr("r", Math.max(1.8, state.currentR * 0.01))
+      .attr("r", Math.max(2.5, state.currentR * 0.015))
       .attr("fill", (d) => (d.isNewlyActive ? "#bcffb3" : "#6bff66"))
       .attr("opacity", (d) => (d.isNewlyActive ? 0.9 : 0.75));
 
