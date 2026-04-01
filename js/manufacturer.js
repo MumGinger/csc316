@@ -245,7 +245,8 @@ function updateVisualization() {
     .append("circle")
       .attr("cx", d => x(d.year))
       .attr("cy", d => y(d.count))
-      .attr("r", d => top.includes(d.key) ? 3.6 : 2.4)
+  // make data points much larger for easier interaction
+  .attr("r", d => top.includes(d.key) ? 8 : 6)
       .attr("fill", d => color(d.key))
       .attr("opacity", d => top.includes(d.key) ? 0.9 : 0.08)
       .each(function(d) {
@@ -261,11 +262,11 @@ function updateVisualization() {
     seriesGroup.selectAll("path")
       .transition().duration(120)
       .attr("opacity", d => (k === null || d.key === k) ? 0.95 : 0.12)
-      .attr("stroke-width", d => (k === d.key) ? 3 : 1.2);
+      .attr("stroke-width", d => (k === d.key) ? 4 : 1.8);
     seriesGroup.selectAll("circle")
       .transition().duration(120)
       .attr("opacity", d => (k === null || d.key === k) ? 0.95 : 0.06)
-      .attr("r", d => (k === d.key) ? 3.2 : 1.8);
+      .attr("r", d => (k === d.key) ? 10 : 6);
   }
 
   function onPointHover(event, d, groupKey) {
@@ -276,16 +277,19 @@ function updateVisualization() {
   }
 
   function onPointMove(event, d) {
+    // Position the tooltip at the top-center of the SVG drawing area (inside chart)
     updateTooltipContent(d);
     const rect = container.node().getBoundingClientRect();
     const ttNode = tooltip.node();
     const ttW = ttNode ? ttNode.offsetWidth : 140;
     const ttH = ttNode ? ttNode.offsetHeight : 48;
 
-    let left = x(d.year) + margin.left + 12; 
-    let top = y(d.count) + margin.top - (ttH / 2);
+  let left = margin.left + Math.round((width - ttW) / 2) + 80;
+    let top = Math.max(6, Math.round(margin.top / 2)) + 60;
+
+
     left = Math.max(6, Math.min(left, rect.width - ttW - 6));
-    top = Math.max(6, Math.min(top, rect.height - ttH - 6));
+
     tooltip.style("left", `${left}px`).style("top", `${top}px`);
   }
 
