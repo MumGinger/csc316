@@ -26,12 +26,49 @@ export default function initCrashViz(containerId = "crash-viz") {
 
   container.append('div')
     .attr('class', 'crash-hint')
-    .text('Hover over points')
+    .text('Click Play Button to initialize animation.')
     .style('font-family', 'sans-serif')
     .style('font-size', '20px')
     .style('color', '#ddd')
     .style('margin-bottom', '6px')
     .style('text-align', 'center');
+
+  const playBtn = container.append('button')
+    .attr('class', 'crash-play-btn')
+    .text('Play')
+    .style('display', 'block')
+    .style('margin', '8px auto')
+    .style('padding', '10px 18px')
+    .style('font-size', '16px')
+    .style('border-radius', '6px')
+    .style('cursor', 'pointer');
+
+  let isPlaying = false;
+  playBtn.on('click', async () => {
+    if (isPlaying) return;
+    isPlaying = true;
+    playBtn.attr('disabled', true).text('Playing…');
+    try {
+      await playSequence();
+    } catch (e) {
+    }
+    isPlaying = false;
+    playBtn.attr('disabled', null).text('Play');
+  });
+  
+  let activeIndex = -1;
+  function highlightPoint(idx) {
+    activeIndex = idx;
+    if (!points) return;
+    points.attr('fill', (d, i) => (i === idx ? '#ffeb3b' : '#fff'))
+      .attr('stroke', (d, i) => (i === idx ? '#333' : '#1a1a1a'))
+      .attr('r', (d, i) => (i === idx ? 6.5 : 4.5));
+  }
+  function clearHighlight() {
+    activeIndex = -1;
+    if (!points) return;
+    points.attr('fill', '#fff').attr('stroke', '#1a1a1a').attr('r', 4.5);
+  }
 
   const parsed = data
     .map(d => ({ ...d, dateObj: new Date(d.date) }))
@@ -125,9 +162,13 @@ export default function initCrashViz(containerId = "crash-viz") {
     .on('mouseover', function(event, d) {
       try { updateGauge(d, false); } catch (e) {}
       d3.select(this).transition().duration(120).attr('r', 6);
+      // highlight this point on hover
+      try { const idx = parsed.indexOf(d); if (idx >= 0) highlightPoint(idx); } catch (e) {}
     })
     .on('mouseout', function() {
       d3.select(this).transition().duration(120).attr('r', 4.5);
+      // clear highlight when not playing
+      try { if (!isPlaying) clearHighlight(); } catch (e) {}
     });
 
   const g = svg.append("g")
@@ -255,16 +296,21 @@ export default function initCrashViz(containerId = "crash-viz") {
 
   async function playSequence() {
     for (let i = 0; i < parsed.length; i++) {
+      // highlight the current point in the line chart
+      try { highlightPoint(i); } catch (e) {}
       updateGauge(parsed[i], i === 0);
       await new Promise(r => setTimeout(r, 1400));
       if (i < parsed.length - 1) {
         await new Promise(r => setTimeout(r, 150));
       }
     }
+    // keep final point highlighted when finished (or remove if you prefer)
+    // clearHighlight();
   }
 
   updateGauge(parsed[0], true);
-  playSequence().catch(() => {});
+  // initial highlight for the first point
+  try { highlightPoint(0); } catch (e) {}
   initialized = true;
 }
 
